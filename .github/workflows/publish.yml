@@ -28,5 +28,3 @@ jobs:
     - run: pnpm install --ignore-scripts
     - run: pnpm build
     - run: pnpm publish --no-git-checks --access public
-      env:
-        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
