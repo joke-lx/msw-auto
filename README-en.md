@@ -1,7 +1,8 @@
 # MSW Auto
 
 <p align="center">
-  <img src="media/msw-logo.svg" alt="MSW Auto Logo" width="200" />
+  <a href="README.md">中文</a> |
+  <a href="README-en.md">English</a>
 </p>
 
 <p align="center">
@@ -22,7 +23,9 @@
 
 - **Powerful Mocking** - Built on MSW, supports REST, GraphQL, and WebSocket
 - **Web UI Management** - Intuitive graphical interface for managing Mock configurations
-- **AI Generation** - Auto-generate Mock data using AI
+- **AI Generation** - Auto-generate Mock data using LLM
+- **MCP Tool Service** - Provides MCP protocol tools for AI integration
+- **Multi-LLM Support** - Supports Anthropic, OpenAI, and more
 - **Import Support** - Import API definitions from Postman and Swagger
 - **Theme Switching** - Light/Dark theme with one-click toggle
 - **Internationalization** - Support for Chinese and English
@@ -37,36 +40,36 @@ npm install msw-auto
 pnpm add msw-auto
 ```
 
-### Initialize
+### Configure LLM
 
 ```bash
-npx msw-auto init
+# Set API Key
+npx msw-auto setting --apikey YOUR_API_KEY
+
+# Choose provider (anthropic, openai, custom)
+npx msw-auto setting --provider anthropic
+
+# Switch model
+npx msw-auto model claude-3-5-sonnet-20241022
 ```
 
-### Start Web UI
+### Start Services
 
 ```bash
-npx msw-auto web
+# Start Mock server
+npx msw-auto server --port 3001
+
+# Start Web UI (another terminal)
+npx msw-auto web --port 3000
+```
+
+Or use interactive menu:
+
+```bash
+npx msw-auto interactive
 ```
 
 Open http://localhost:3000 in your browser to access the Web UI.
-
-### Create Mock
-
-Create mocks via Web UI or code:
-
-```typescript
-import { http, HttpResponse } from 'msw-auto'
-
-export const handlers = [
-  http.get('/api/users', () => {
-    return HttpResponse.json([
-      { id: 1, name: 'John Doe' },
-      { id: 2, name: 'Jane Doe' }
-    ])
-  })
-]
-```
 
 ## Commands
 
@@ -77,6 +80,61 @@ export const handlers = [
 | `msw-auto web` | Start Web UI |
 | `msw-auto generate` | AI generate Mock |
 | `msw-auto import` | Import from Postman/Swagger |
+| `msw-auto config` | Show LLM configuration |
+| `msw-auto setting` | Configure LLM (--provider, --apikey, --baseurl) |
+| `msw-auto model` | Switch LLM model |
+| `msw-auto interactive` | Start interactive menu |
+
+## LLM Configuration
+
+### Supported Providers
+
+| Provider | Default Model | Base URL |
+|----------|---------------|----------|
+| Anthropic | claude-3-5-sonnet-20241022 | https://api.anthropic.com |
+| OpenAI | gpt-4o | https://api.openai.com/v1 |
+| Custom | - | User specified |
+
+### Configuration Examples
+
+```bash
+# Anthropic (Claude)
+npx msw-auto setting --provider anthropic --apikey sk-ant-xxx
+
+# OpenAI
+npx msw-auto setting --provider openai --apikey sk-xxx
+
+# Custom API
+npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --apikey xxx
+```
+
+## MCP Service
+
+MCP Server provides the following tools for AI integration (e.g., Claude Code):
+
+| Tool | Description |
+|------|-------------|
+| `analyze_project` | Analyze project to discover API endpoints |
+| `generate_mock` | Generate Mock data using LLM |
+| `start_mock_server` | Start Mock server |
+| `list_projects` | List all projects |
+| `get_llm_config` | Get LLM configuration |
+| `reload_llm_config` | Reload LLM configuration |
+
+### MCP Configuration
+
+Configure in Claude Code with `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "msw-auto": {
+      "command": "npx",
+      "args": ["msw-auto", "mcp"]
+    }
+  }
+}
+```
 
 ## Web UI Features
 
@@ -85,18 +143,28 @@ export const handlers = [
 - **Mock Management** - Create, edit, delete, and enable/disable mocks
 - **Settings** - Theme, language, and API configuration
 
-## Configuration
+## Architecture
 
-### Theme
-
-Web UI supports three theme modes:
-- Light mode
-- Dark mode
-- System default
-
-### Language
-
-Support for Chinese and English interface switching.
+```
+CLI / Web UI
+    │
+    ├── setting --provider openai   → Configure LLM
+    ├── model gpt-4o               → Switch model
+    └── interactive                → Interactive menu
+            │
+            ▼
+    MCP Server (Tool Service)
+            │
+            ├── analyze_project    → Analyze code
+            ├── generate_mock     → Generate Mock ──► LLM API
+            └── start_mock_server → Start server
+                    │
+                    ▼
+            LLM Service (Multi-Provider)
+                    ├── Anthropic (Claude)
+                    ├── OpenAI (GPT-4)
+                    └── Custom API
+```
 
 ## Documentation
 
@@ -115,3 +183,4 @@ MIT License - See [LICENSE](LICENSE.md) for more information.
 - [MSW](https://mswjs.io/) - Core mocking library
 - [Ant Design](https://ant.design/) - UI component library
 - [Vite](https://vitejs.dev/) - Build tool
+- [Anthropic](https://www.anthropic.com/) - Claude AI
