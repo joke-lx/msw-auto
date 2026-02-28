@@ -110,7 +110,7 @@ npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --ap
 
 ## MCP 服务
 
-MCP Server 提供以下工具，可供任何支持 MCP 协议的 AI 集成：
+MCP Server 提供以下工具，任何支持 MCP 协议的 LLM 都可以调用：
 
 ### 文件操作
 
@@ -135,7 +135,7 @@ MCP Server 提供以下工具，可供任何支持 MCP 协议的 AI 集成：
 
 ### MCP 配置
 
-在支持 MCP 的 AI 客户端中配置：
+配置 LLM 使用 MCP 工具：
 
 ```json
 {

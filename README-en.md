@@ -110,7 +110,7 @@ npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --ap
 
 ## MCP Service
 
-MCP Server provides the following tools for any MCP-compatible AI client:
+MCP Server provides the following tools, any MCP-compatible LLM can call:
 
 ### File Operations
 
@@ -135,7 +135,7 @@ MCP Server provides the following tools for any MCP-compatible AI client:
 
 ### MCP Configuration
 
-Configure in any MCP-compatible AI client:
+Configure LLM to use MCP tools:
 
 ```json
 {
