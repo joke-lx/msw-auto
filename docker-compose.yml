@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  msw-auto:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"  # Mock server API
+      - "3000:3000"  # Web UI
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - WEB_PORT=3000
+      - DB_PATH=/app/data/mocks.db
+      # - ANTHROPIC_API_KEY=your-api-key
+      # - BACKEND_URL=http://host.docker.internal:8080
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 开发模式服务
+  msw-auto-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+      - "3000:3000"
+      - "9229:9229"  # Node inspector
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DEBUG=*
+    command: pnpm dev
+    profiles:
+      - dev

@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Dependencies
+node_modules
+web/node_modules
+
+# Build output
+lib
+dist
+*.log
+
+# Test
+test
+coverage
+*.vitest-temp.json
+
+# Docs
+docs
+media
+decisions
+README-en.md
+
+# Misc
+.DS_Store
+Thumbs.db
+*.local
+.env.local
+.env.*.local

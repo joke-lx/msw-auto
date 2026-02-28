@@ -1,0 +1,25 @@
+# 开发模式 Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+# 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# 复制依赖文件
+COPY package.json pnpm-lock.yaml ./
+COPY web/package.json ./web/
+
+# 安装依赖
+RUN pnpm install --frozen-lockfile
+
+# 复制源码
+COPY . .
+
+# 构建
+RUN pnpm build
+
+EXPOSE 3001 3000
+
+# 开发模式
+CMD ["sh", "-c", "pnpm dev"]
