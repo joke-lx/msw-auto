@@ -3,50 +3,24 @@
   "version": "2.12.10",
   "description": "Intelligent automated Mock server with Web UI and AI generation capabilities",
   "type": "module",
-  "main": "./lib/core/index.js",
-  "module": "./lib/core/index.mjs",
-  "types": "./lib/core/index.d.ts",
-  "exports": {
-    ".": {
-      "module-sync": {
-        "types": "./lib/core/index.d.mts",
-        "default": "./lib/core/index.mjs"
-      },
-      "module": {
-        "types": "./lib/core/index.d.mts",
-        "default": "./lib/core/index.mjs"
-      },
-      "import": {
-        "types": "./lib/core/index.d.mts",
-        "default": "./lib/core/index.mjs"
-      },
-      "default": {
-        "types": "./lib/core/index.d.ts",
-        "default": "./lib/core/index.js"
-      }
-    },
-    "./mockServiceWorker.js": "./lib/mockServiceWorker.js",
-    "./server": "./src/server/index.ts",
-    "./mcp": "./src/mcp/server.ts",
-    "./package.json": "./package.json"
-  },
   "bin": {
-    "msw": "cli/index.js",
-    "msw-auto": "cli/index.js"
+    "msw-auto": "dist/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "dev": "concurrently \"pnpm dev:core\" \"pnpm dev:web\"",
-    "dev:core": "tsup --watch",
+    "dev": "concurrently \"pnpm dev:cli\" \"pnpm dev:server\"",
     "dev:server": "tsx watch src/server/index.ts",
-    "dev:web": "pnpm --filter web dev",
     "dev:cli": "node --watch cli/index.js",
-    "clean": "rimraf ./lib",
-    "build": "pnpm clean && tsup",
-    "build:web": "pnpm --filter web build",
-    "build:cli": "tsc cli/*.ts --outDir dist-cli",
+    "clean": "rimraf ./dist",
+    "build": "pnpm clean && tsup --config tsup.config.simple.ts",
     "test": "vitest",
     "server": "tsx src/server/index.ts",
     "cli": "node cli/index.js",

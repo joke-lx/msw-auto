@@ -1,5 +1,5 @@
 
-# Simple CI - just install dependencies
+# CI - install dependencies and build
 
 name: Node.js CI
 
@@ -23,3 +23,4 @@ jobs:
       with:
         node-version: '20'
     - run: pnpm install --ignore-scripts
+    - run: pnpm build
