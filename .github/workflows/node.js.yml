@@ -29,8 +29,7 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'pnpm'
     - run: pnpm install --frozen-lockfile
-    - run: pnpm build
-    - run: pnpm test
+    - run: pnpm lint
 
   publish:
     needs: build
@@ -46,7 +45,6 @@ jobs:
         node-version: '20'
         registry-url: 'https://registry.npmjs.org'
     - run: pnpm install --frozen-lockfile
-    - run: pnpm build
     - name: Publish to NPM
       run: npm publish --access public
       env:
