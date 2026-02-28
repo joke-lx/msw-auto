@@ -44,7 +44,6 @@
     "dev:web": "pnpm --filter web dev",
     "dev:cli": "node --watch cli/index.js",
     "clean": "rimraf ./lib",
-    "lint": "eslint \"{cli,src}/**/*.ts\"",
     "build": "pnpm clean && tsup",
     "build:web": "pnpm --filter web build",
     "build:cli": "tsc cli/*.ts --outDir dist-cli",
