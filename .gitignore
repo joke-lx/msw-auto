@@ -25,3 +25,6 @@ msw-*.tgz
 web/dist
 web/node_modules
 *.local
+
+# User config (contains API keys)
+.msw-auto

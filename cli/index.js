@@ -6,8 +6,20 @@ import { server } from './commands/server.js'
 import { web } from './commands/web.js'
 import { generate } from './commands/generate.js'
 import { importCmd } from './commands/import.js'
+import { menu, showHelp } from './menu.js'
+import { configCmd, modelCmd, showConfig } from './commands/config.js'
 
 banner()
+
+// Check if running in interactive mode (no arguments)
+const isInteractive = process.argv.length === 2
+
+if (isInteractive) {
+  console.log('Starting in interactive mode...')
+  console.log('Type "help" for available commands or press Enter to continue.\n')
+  menu().catch(console.error)
+  process.exit(0)
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
 yargs(process.argv.slice(2))
@@ -112,6 +124,73 @@ yargs(process.argv.slice(2))
         .example('$0 import ./swagger.yaml --output ./mocks')
     },
     importCmd,
+  )
+  .command(
+    'interactive',
+    'Start interactive mode',
+    () => {},
+    async () => {
+      await menu()
+    },
+  )
+  .command(
+    'config',
+    'Show current configuration',
+    () => {},
+    async () => {
+      await showConfig()
+    },
+  )
+  .command(
+    'setting',
+    'Configure LLM settings (provider, baseUrl, apiKey)',
+    (yargs) => {
+      yargs
+        .option('provider', {
+          type: 'string',
+          description: 'LLM provider (anthropic, openai, qwen, custom)',
+          choices: ['anthropic', 'openai', 'qwen', 'custom'],
+        })
+        .option('baseurl', {
+          type: 'string',
+          description: 'API base URL (for custom provider)',
+        })
+        .option('apikey', {
+          type: 'string',
+          description: 'API key',
+        })
+        .example('$0 setting --provider openai')
+        .example('$0 setting --apikey sk-xxx')
+        .example('$0 setting --provider custom --baseurl https://api.example.com/v1')
+    },
+    async (argv) => {
+      await configCmd(argv)
+    },
+  )
+  .command(
+    'model',
+    'Switch LLM model',
+    (yargs) => {
+      yargs
+        .positional('model', {
+          type: 'string',
+          description: 'Model name',
+          demandOption: true,
+        })
+        .example('$0 model claude-3-5-sonnet-20241022')
+        .example('$0 model gpt-4o')
+    },
+    async (argv) => {
+      await modelCmd(argv.model)
+    },
+  )
+  .command(
+    'help',
+    'Show help information',
+    () => {},
+    async () => {
+      await showHelp()
+    },
   )
   .demandCommand()
   .help().argv

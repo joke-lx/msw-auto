@@ -10,18 +10,18 @@ ${pc.dim('━'.repeat(62))}
 `)
 }
 
-export function success(message: string) {
+export function success(message) {
   console.log(`${pc.green('✓')} ${message}`)
 }
 
-export function error(message: string) {
+export function error(message) {
   console.error(`${pc.red('✗')} ${message}`)
 }
 
-export function info(message: string) {
+export function info(message) {
   console.log(`${pc.blue('ℹ')} ${message}`)
 }
 
-export function warn(message: string) {
+export function warn(message) {
   console.log(`${pc.yellow('⚠')} ${message}`)
 }

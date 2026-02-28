@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "msw-auto": {
+      "command": "node",
+      "args": ["src/mcp/server.ts"],
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}
