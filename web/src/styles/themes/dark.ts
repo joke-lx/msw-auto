@@ -1,0 +1,30 @@
+export const darkTheme = {
+  colors: {
+    primary: '#4096ff',
+    primaryHover: '#69b1ff',
+    primaryActive: '#1677ff',
+    background: '#000000',
+    backgroundSecondary: '#141414',
+    surface: '#1f1f1f',
+    surfaceHover: '#2a2a2a',
+    text: '#ffffff',
+    textSecondary: '#a0a0a0',
+    textTertiary: '#666666',
+    border: '#424242',
+    borderLight: '#303030',
+    success: '#52c41a',
+    warning: '#faad14',
+    error: '#ff4d4f',
+    info: '#4096ff',
+  },
+  shadows: {
+    sm: '0 1px 2px rgba(0, 0, 0, 0.3)',
+    md: '0 2px 4px rgba(0, 0, 0, 0.4)',
+    lg: '0 4px 12px rgba(0, 0, 0, 0.5)',
+  },
+  radius: {
+    sm: '4px',
+    md: '8px',
+    lg: '12px',
+  },
+}

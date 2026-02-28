@@ -1,8 +1,8 @@
 {
-  "name": "msw",
+  "name": "msw-auto",
   "version": "2.12.10",
-  "description": "Seamless REST/GraphQL API mocking library for browser and Node.js.",
-  "type": "commonjs",
+  "description": "Intelligent automated Mock server with Web UI and AI generation capabilities",
+  "type": "module",
   "main": "./lib/core/index.js",
   "module": "./lib/core/index.mjs",
   "types": "./lib/core/index.d.ts",
@@ -163,19 +163,23 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "msw": "cli/index.js"
+    "msw": "cli/index.js",
+    "msw-auto": "cli/index.js"
   },
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "start": "tsup --watch",
+    "dev": "concurrently \"pnpm dev:core\" \"pnpm dev:web\"",
+    "dev:core": "tsup --watch",
+    "dev:web": "pnpm --filter web dev",
     "clean": "rimraf ./lib",
     "lint": "eslint \"{cli,src,test}/**/*.ts\"",
     "build": "pnpm clean && cross-env NODE_ENV=production tsup && pnpm patch:dts",
+    "build:web": "pnpm --filter web build",
     "patch:dts": "node \"./config/scripts/patch-ts.js\"",
     "publint": "publint",
-    "test": "pnpm test:unit && pnpm test:node && pnpm test:browser && pnpm test:native",
+    "test": "vitest",
     "test:unit": "vitest",
     "test:node": "vitest --config=./test/node/vitest.config.ts",
     "test:native": "vitest --config=./test/native/vitest.config.ts",
@@ -188,7 +192,11 @@
     "prepack": "pnpm build",
     "release": "release publish",
     "postinstall": "node -e \"import('./config/scripts/postinstall.js').catch(() => void 0)\"",
-    "knip": "knip"
+    "knip": "knip",
+    "web": "pnpm --filter web dev",
+    "web:build": "pnpm --filter web build",
+    "cli": "node cli/index.js",
+    "server": "pnpm --filter web run server"
   },
   "lint-staged": {
     "**/*.ts": [
@@ -198,17 +206,17 @@
       "prettier --write"
     ]
   },
-  "homepage": "https://mswjs.io",
+  "homepage": "https://msw-auto.dev",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mswjs/msw.git"
+    "url": "git+https://github.com/msw-auto/msw-auto.git"
   },
   "author": {
-    "name": "Artem Zakharchenko",
-    "url": "https://github.com/kettanaito"
+    "name": "MSW Auto Team",
+    "url": "https://github.com/msw-auto"
   },
   "license": "MIT",
-  "funding": "https://github.com/sponsors/mswjs",
+  "funding": "https://github.com/sponsors/msw-auto",
   "files": [
     "config/package.json",
     "config/constants.js",
@@ -233,7 +241,9 @@
     "handler",
     "testing",
     "front-end",
-    "back-end"
+    "back-end",
+    "automation",
+    "ai"
   ],
   "sideEffects": false,
   "dependencies": {
@@ -259,61 +269,57 @@
   "devDependencies": {
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
-    "@epic-web/test-server": "^0.1.6",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.39.1",
-    "@fastify/websocket": "^11.2.0",
-    "@graphql-typed-document-node/core": "^3.2.0",
-    "@open-draft/test-server": "^0.4.2",
-    "@ossjs/release": "^0.10.1",
-    "@playwright/test": "^1.50.1",
     "@types/express": "^5.0.5",
-    "@types/json-bigint": "^1.0.4",
     "@types/node": "~20.19.25",
-    "@types/serviceworker": "^0.0.167",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^8.47.0",
     "@typescript-eslint/parser": "^8.47.0",
-    "@web/dev-server": "^0.4.6",
+    "@vitejs/plugin-react": "^4.3.0",
+    "antd": "^5.22.0",
     "axios": "^1.13.5",
-    "babel-minify": "^0.5.1",
-    "commitizen": "^4.3.1",
+    "concurrently": "^9.0.0",
     "cross-env": "^10.1.0",
-    "cross-fetch": "^4.1.0",
-    "cz-conventional-changelog": "3.3.0",
     "esbuild": "^0.27.0",
-    "esbuild-loader": "^4.4.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.0",
     "express": "^5.1.0",
-    "fastify": "^5.6.2",
-    "fs-teardown": "^0.3.0",
-    "glob": "^13.0.0",
-    "jsdom": "^25.0.1",
-    "json-bigint": "^1.0.0",
+    "framer-motion": "^11.0.0",
+    "i18next": "^24.0.0",
+    "i18next-browser-languagedetector": "^8.0.0",
     "knip": "^5.70.1",
     "lint-staged": "^15.2.10",
-    "msw": "workspace:*",
-    "page-with": "^0.6.1",
-    "prettier": "^3.6.2",
-    "publint": "^0.3.15",
-    "regenerator-runtime": "^0.14.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-i18next": "^15.0.0",
+    "react-router-dom": "^7.0.0",
     "rimraf": "^6.1.2",
     "simple-git-hooks": "^2.13.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.47.0",
     "undici": "^7.16.0",
-    "url-loader": "^4.1.1",
+    "vite": "^6.0.0",
     "vitest": "^4.0.13",
-    "vitest-environment-miniflare": "^2.14.4",
-    "webpack": "^5.95.0",
-    "webpack-http-server": "^0.5.0"
+    "zustand": "^5.0.0"
   },
   "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
     "typescript": ">= 4.8.x"
   },
   "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
     "typescript": {
       "optional": true
     }
@@ -324,8 +330,6 @@
     }
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm lint-staged",
-    "prepare-commit-msg": "grep -qE '^[^#]' .git/COMMIT_EDITMSG || (exec < /dev/tty && pnpm cz --hook || true)",
-    "commit-msg": "pnpm commitlint --edit $1"
+    "pre-commit": "pnpm lint-staged"
   }
 }

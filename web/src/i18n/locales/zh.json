@@ -1,0 +1,78 @@
+{
+  "nav": {
+    "dashboard": "仪表盘",
+    "explorer": "API 浏览器",
+    "mocks": "Mock 管理",
+    "settings": "设置",
+    "documentation": "文档"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "totalRequests": "总请求数",
+    "activeMocks": "活跃 Mock",
+    "recentRequests": "最近请求",
+    "noRequests": "暂无请求"
+  },
+  "explorer": {
+    "title": "API 浏览器",
+    "search": "搜索 API...",
+    "filter": "筛选",
+    "method": "方法",
+    "path": "路径",
+    "status": "状态",
+    "noApis": "未找到 API"
+  },
+  "mocks": {
+    "title": "Mock 管理",
+    "create": "创建 Mock",
+    "edit": "编辑 Mock",
+    "delete": "删除 Mock",
+    "duplicate": "复制",
+    "enable": "启用",
+    "disable": "禁用",
+    "name": "名称",
+    "method": "方法",
+    "path": "路径",
+    "response": "响应",
+    "delay": "延迟 (毫秒)",
+    "save": "保存",
+    "cancel": "取消",
+    "noMocks": "暂无 Mock 配置"
+  },
+  "settings": {
+    "title": "设置",
+    "general": "通用",
+    "theme": "主题",
+    "language": "语言",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "themeSystem": "跟随系统",
+    "apiConfig": "API 配置",
+    "apiUrl": "API 地址",
+    "apiKey": "API 密钥",
+    "save": "保存设置",
+    "saved": "设置已保存"
+  },
+  "documentation": {
+    "title": "文档",
+    "gettingStarted": "快速开始",
+    "installation": "安装",
+    "configuration": "配置",
+    "apiReference": "API 参考",
+    "examples": "示例"
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "confirm": "确认",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "save": "保存",
+    "back": "返回",
+    "next": "下一步",
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  }
+}

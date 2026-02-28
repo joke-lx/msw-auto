@@ -1,0 +1,78 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "explorer": "API Explorer",
+    "mocks": "Mock Management",
+    "settings": "Settings",
+    "documentation": "Documentation"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "totalRequests": "Total Requests",
+    "activeMocks": "Active Mocks",
+    "recentRequests": "Recent Requests",
+    "noRequests": "No requests yet"
+  },
+  "explorer": {
+    "title": "API Explorer",
+    "search": "Search APIs...",
+    "filter": "Filter",
+    "method": "Method",
+    "path": "Path",
+    "status": "Status",
+    "noApis": "No APIs found"
+  },
+  "mocks": {
+    "title": "Mock Management",
+    "create": "Create Mock",
+    "edit": "Edit Mock",
+    "delete": "Delete Mock",
+    "duplicate": "Duplicate",
+    "enable": "Enable",
+    "disable": "Disable",
+    "name": "Name",
+    "method": "Method",
+    "path": "Path",
+    "response": "Response",
+    "delay": "Delay (ms)",
+    "save": "Save",
+    "cancel": "Cancel",
+    "noMocks": "No mocks configured"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "theme": "Theme",
+    "language": "Language",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "apiConfig": "API Configuration",
+    "apiUrl": "API URL",
+    "apiKey": "API Key",
+    "save": "Save Settings",
+    "saved": "Settings saved"
+  },
+  "documentation": {
+    "title": "Documentation",
+    "gettingStarted": "Getting Started",
+    "installation": "Installation",
+    "configuration": "Configuration",
+    "apiReference": "API Reference",
+    "examples": "Examples"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "back": "Back",
+    "next": "Next",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  }
+}
