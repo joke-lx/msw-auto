@@ -6,7 +6,6 @@
   "main": "./lib/core/index.js",
   "module": "./lib/core/index.mjs",
   "types": "./lib/core/index.d.ts",
-  "packageManager": "pnpm@9.15.0",
   "exports": {
     ".": {
       "module-sync": {
