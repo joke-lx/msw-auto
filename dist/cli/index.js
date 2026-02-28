@@ -548,6 +548,22 @@ async function configMenu() {
   const spinner = ora(t("menu.starting")).start();
   try {
     await execAsync(`npx msw-auto setting --provider ${provider}`);
+    if (provider === "custom") {
+      spinner.stop();
+      const baseurl = await default3({
+        message: getCurrentLang() === "zh" ? "\u8BF7\u8F93\u5165 Base URL:" : "Enter Base URL:"
+      });
+      if (baseurl) {
+        await execAsync(`npx msw-auto setting --baseurl ${baseurl}`);
+      }
+    }
+    const apiKeyMessage = getCurrentLang() === "zh" ? "\u8BF7\u8F93\u5165 API Key:" : "Enter API Key:";
+    const apiKey = await default3({
+      message: apiKeyMessage
+    });
+    if (apiKey) {
+      await execAsync(`npx msw-auto setting --apikey ${apiKey}`);
+    }
     spinner.succeed(t("menu.success"));
   } catch (error2) {
     spinner.fail(t("menu.failed"));

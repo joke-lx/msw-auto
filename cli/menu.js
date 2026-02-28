@@ -4,7 +4,7 @@
  * Provides an interactive menu for managing MSW Auto
  */
 
-import { select } from '@inquirer/prompts';
+import { select, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import { exec } from 'child_process';
@@ -131,8 +131,31 @@ async function configMenu() {
   });
 
   const spinner = ora(t('menu.starting')).start();
+
   try {
     await execAsync(`npx msw-auto setting --provider ${provider}`);
+
+    // If custom provider, ask for baseurl
+    if (provider === 'custom') {
+      spinner.stop();
+      const baseurl = await input({
+        message: getCurrentLang() === 'zh' ? '请输入 Base URL:' : 'Enter Base URL:',
+      });
+      if (baseurl) {
+        await execAsync(`npx msw-auto setting --baseurl ${baseurl}`);
+      }
+    }
+
+    // Ask for API key
+    const apiKeyMessage = getCurrentLang() === 'zh' ? '请输入 API Key:' : 'Enter API Key:';
+    const apiKey = await input({
+      message: apiKeyMessage,
+    });
+
+    if (apiKey) {
+      await execAsync(`npx msw-auto setting --apikey ${apiKey}`);
+    }
+
     spinner.succeed(t('menu.success'));
   } catch (error) {
     spinner.fail(t('menu.failed'));
