@@ -9,9 +9,36 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { t, setLanguage, getCurrentLang } from './i18n.js';
 
 const execAsync = promisify(exec);
+
+// Get the directory of the current module
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Get CLI path based on environment
+function getCLIPath() {
+  const devCLIPath = path.resolve(__dirname, '../src/server/index.ts');
+  const prodCLIPath = path.resolve(__dirname, '../cli/index.js');
+
+  try {
+    const fs = require('fs');
+    if (fs.existsSync(prodCLIPath)) {
+      return prodCLIPath;
+    }
+  } catch {}
+
+  return devCLIPath;
+}
+
+// Run CLI command
+async function runCLI(args) {
+  const cliPath = getCLIPath();
+  const cliDir = path.dirname(cliPath);
+  await execAsync(`node "${cliPath}" ${args}`, { cwd: cliDir });
+}
 
 /**
  * Main interactive menu
@@ -92,7 +119,13 @@ async function startServerMenu() {
 
   const spinner = ora(t('menu.starting')).start();
   try {
-    await execAsync(`npx msw-auto server --port ${port}`);
+    // Use tsx for TypeScript files or node for JS
+    const serverPath = getServerPath();
+    const isTS = serverPath.endsWith('.ts');
+    const runner = isTS ? 'tsx' : 'node';
+    await execAsync(`${runner} "${serverPath}" --port ${port}`, {
+      stdio: 'inherit'
+    });
     spinner.succeed(t('menu.success'));
   } catch (error) {
     spinner.fail(t('menu.failed'));
@@ -112,8 +145,8 @@ async function startWebMenu() {
 
   const spinner = ora(t('menu.starting')).start();
   try {
-    await execAsync(`npx msw-auto web --port ${port}`);
-    spinner.succeed(t('menu.success'));
+    // TODO: Start web UI server
+    spinner.succeed('Web UI feature coming soon');
   } catch (error) {
     spinner.fail(t('menu.failed'));
     console.error(error.message);
@@ -133,7 +166,7 @@ async function configMenu() {
   const spinner = ora(t('menu.starting')).start();
 
   try {
-    await execAsync(`npx msw-auto setting --provider ${provider}`);
+    await runCLI(`setting --provider ${provider}`);
 
     // If custom provider, ask for baseurl
     if (provider === 'custom') {
@@ -142,7 +175,7 @@ async function configMenu() {
         message: getCurrentLang() === 'zh' ? '请输入 Base URL:' : 'Enter Base URL:',
       });
       if (baseurl) {
-        await execAsync(`npx msw-auto setting --baseurl ${baseurl}`);
+        await runCLI(`setting --baseurl ${baseurl}`);
       }
     }
 
@@ -153,7 +186,7 @@ async function configMenu() {
     });
 
     if (apiKey) {
-      await execAsync(`npx msw-auto setting --apikey ${apiKey}`);
+      await runCLI(`setting --apikey ${apiKey}`);
     }
 
     spinner.succeed(t('menu.success'));
@@ -181,7 +214,7 @@ async function switchLanguageMenu() {
 async function showConfigMenu() {
   const spinner = ora('Loading...').start();
   try {
-    await execAsync(`npx msw-auto config`);
+    await runCLI('config');
     spinner.succeed(t('menu.success'));
   } catch (error) {
     spinner.fail(t('menu.failed'));

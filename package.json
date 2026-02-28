@@ -1,6 +1,6 @@
 {
   "name": "msw-auto",
-  "version": "2.12.13",
+  "version": "2.12.14",
   "description": "Intelligent automated Mock server with Web UI and AI generation capabilities",
   "type": "module",
   "bin": {

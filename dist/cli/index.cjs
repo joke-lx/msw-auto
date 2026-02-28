@@ -131,7 +131,7 @@ async function copyWorkerScript(destination, cwd) {
 function printSuccessMessage(paths) {
   console.log(`
 ${import_picocolors2.default.green("Worker script successfully copied!")}
-${paths.map((path5) => import_picocolors2.default.gray(`  - ${path5}
+${paths.map((path6) => import_picocolors2.default.gray(`  - ${path6}
 `))}
 Continue by describing the network in your application:
 
@@ -141,7 +141,7 @@ ${import_picocolors2.default.red(import_picocolors2.default.bold("https://mswjs.
 }
 function printFailureMessage(pathsWithErrors) {
   console.error(`${import_picocolors2.default.red("Copying the worker script failed at following paths:")}
-${pathsWithErrors.map(([path5, error2]) => import_picocolors2.default.gray(`  - ${path5}`) + `
+${pathsWithErrors.map(([path6, error2]) => import_picocolors2.default.gray(`  - ${path6}`) + `
   ${error2}`).join("\n\n")}
   `);
 }
@@ -463,7 +463,28 @@ var import_chalk = __toESM(require("chalk"), 1);
 var import_ora = __toESM(require("ora"), 1);
 var import_child_process2 = require("child_process");
 var import_util = require("util");
+var import_path2 = __toESM(require("path"), 1);
+var import_url2 = require("url");
+var import_meta3 = {};
 var execAsync = (0, import_util.promisify)(import_child_process2.exec);
+var __dirname2 = import_path2.default.dirname((0, import_url2.fileURLToPath)(import_meta3.url));
+function getCLIPath() {
+  const devCLIPath = import_path2.default.resolve(__dirname2, "../src/server/index.ts");
+  const prodCLIPath = import_path2.default.resolve(__dirname2, "../cli/index.js");
+  try {
+    const fs3 = require("fs");
+    if (fs3.existsSync(prodCLIPath)) {
+      return prodCLIPath;
+    }
+  } catch {
+  }
+  return devCLIPath;
+}
+async function runCLI(args) {
+  const cliPath = getCLIPath();
+  const cliDir = import_path2.default.dirname(cliPath);
+  await execAsync(`node "${cliPath}" ${args}`, { cwd: cliDir });
+}
 async function menu() {
   let running = true;
   while (running) {
@@ -536,7 +557,12 @@ async function startServerMenu() {
   });
   const spinner = (0, import_ora.default)(t("menu.starting")).start();
   try {
-    await execAsync(`npx msw-auto server --port ${port}`);
+    const serverPath = getServerPath();
+    const isTS = serverPath.endsWith(".ts");
+    const runner = isTS ? "tsx" : "node";
+    await execAsync(`${runner} "${serverPath}" --port ${port}`, {
+      stdio: "inherit"
+    });
     spinner.succeed(t("menu.success"));
   } catch (error2) {
     spinner.fail(t("menu.failed"));
@@ -554,8 +580,7 @@ async function startWebMenu() {
   });
   const spinner = (0, import_ora.default)(t("menu.starting")).start();
   try {
-    await execAsync(`npx msw-auto web --port ${port}`);
-    spinner.succeed(t("menu.success"));
+    spinner.succeed("Web UI feature coming soon");
   } catch (error2) {
     spinner.fail(t("menu.failed"));
     console.error(error2.message);
@@ -572,14 +597,14 @@ async function configMenu() {
   });
   const spinner = (0, import_ora.default)(t("menu.starting")).start();
   try {
-    await execAsync(`npx msw-auto setting --provider ${provider}`);
+    await runCLI(`setting --provider ${provider}`);
     if (provider === "custom") {
       spinner.stop();
       const baseurl = await (0, import_input.default)({
         message: getCurrentLang() === "zh" ? "\u8BF7\u8F93\u5165 Base URL:" : "Enter Base URL:"
       });
       if (baseurl) {
-        await execAsync(`npx msw-auto setting --baseurl ${baseurl}`);
+        await runCLI(`setting --baseurl ${baseurl}`);
       }
     }
     const apiKeyMessage = getCurrentLang() === "zh" ? "\u8BF7\u8F93\u5165 API Key:" : "Enter API Key:";
@@ -587,7 +612,7 @@ async function configMenu() {
       message: apiKeyMessage
     });
     if (apiKey) {
-      await execAsync(`npx msw-auto setting --apikey ${apiKey}`);
+      await runCLI(`setting --apikey ${apiKey}`);
     }
     spinner.succeed(t("menu.success"));
   } catch (error2) {
@@ -610,7 +635,7 @@ async function switchLanguageMenu() {
 async function showConfigMenu() {
   const spinner = (0, import_ora.default)("Loading...").start();
   try {
-    await execAsync(`npx msw-auto config`);
+    await runCLI("config");
     spinner.succeed(t("menu.success"));
   } catch (error2) {
     spinner.fail(t("menu.failed"));
@@ -641,7 +666,7 @@ ${getCurrentLang() === "zh" ? "\u793A\u4F8B\uFF1A" : "Examples:"}
 
 // cli/config.js
 var fs2 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
+var path5 = __toESM(require("path"), 1);
 var os = __toESM(require("os"), 1);
 var DEFAULT_CONFIG = {
   llm: {
@@ -662,7 +687,7 @@ var ConfigManager = class {
   constructor() {
     const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
     const baseDir = isCI ? process.env.TMPDIR || "/tmp" : os.homedir();
-    this.configPath = path4.join(baseDir, ".msw-auto", "config.json");
+    this.configPath = path5.join(baseDir, ".msw-auto", "config.json");
     this.config = this.load();
   }
   /**
@@ -683,7 +708,7 @@ var ConfigManager = class {
    */
   save() {
     try {
-      const dir = path4.dirname(this.configPath);
+      const dir = path5.dirname(this.configPath);
       if (!fs2.existsSync(dir)) {
         fs2.mkdirSync(dir, { recursive: true });
       }
