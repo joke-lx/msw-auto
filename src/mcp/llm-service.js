@@ -11,7 +11,9 @@ import * as os from 'os';
  * Get LLM config from file
  */
 function getLLMConfig() {
-    const configPath = path.join(os.homedir(), '.msw-auto', 'config.json');
+    const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
+    const baseDir = isCI ? process.env.TMPDIR || '/tmp' : os.homedir();
+    const configPath = path.join(baseDir, '.msw-auto', 'config.json');
     const defaultConfig = {
         provider: 'anthropic',
         baseUrl: 'https://api.anthropic.com',

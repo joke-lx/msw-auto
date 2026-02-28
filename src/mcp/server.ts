@@ -2,7 +2,7 @@
  * MSW Auto MCP Server
  *
  * Provides tools for AI-powered mock server management
- * Uses configured LLM API directly (not Claude Code)
+ * Tools include: file operations, project analysis, mock generation
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -11,6 +11,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import * as fs from 'fs';
+import * as path from 'path';
 import { analyzeProject } from './analyzer.js';
 import { llmService } from './llm-service.js';
 import { ProjectManager } from './project-manager.js';
@@ -44,6 +46,82 @@ class MSWAutoMCPServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
+          // File operations
+          {
+            name: 'read_file',
+            description: 'Read content of a file',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: {
+                  type: 'string',
+                  description: 'Absolute or relative path to the file',
+                },
+              },
+              required: ['path'],
+            },
+          },
+          {
+            name: 'write_file',
+            description: 'Write content to a file (creates or overwrites)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: {
+                  type: 'string',
+                  description: 'Absolute or relative path for the file',
+                },
+                content: {
+                  type: 'string',
+                  description: 'Content to write to the file',
+                },
+              },
+              required: ['path', 'content'],
+            },
+          },
+          {
+            name: 'list_directory',
+            description: 'List files and directories',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: {
+                  type: 'string',
+                  description: 'Directory path to list',
+                },
+              },
+              required: ['path'],
+            },
+          },
+          {
+            name: 'create_directory',
+            description: 'Create a new directory',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: {
+                  type: 'string',
+                  description: 'Directory path to create',
+                },
+              },
+              required: ['path'],
+            },
+          },
+          {
+            name: 'file_exists',
+            description: 'Check if a file or directory exists',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: {
+                  type: 'string',
+                  description: 'Path to check',
+                },
+              },
+              required: ['path'],
+            },
+          },
+          // Project operations
           {
             name: 'analyze_project',
             description: 'Analyze a project to discover API endpoints',
@@ -71,6 +149,10 @@ class MSWAutoMCPServer {
                 projectPath: {
                   type: 'string',
                   description: 'Path to the project directory',
+                },
+                outputPath: {
+                  type: 'string',
+                  description: 'Output file path for generated mocks',
                 },
                 endpoints: {
                   type: 'array',
@@ -101,20 +183,6 @@ class MSWAutoMCPServer {
                   type: 'number',
                   description: 'Port number for the mock server (default: 3001)',
                   default: 3001,
-                },
-              },
-              required: ['projectPath'],
-            },
-          },
-          {
-            name: 'stop_mock_server',
-            description: 'Stop the running mock server',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                projectPath: {
-                  type: 'string',
-                  description: 'Path to the project directory',
                 },
               },
               required: ['projectPath'],
@@ -154,27 +222,30 @@ class MSWAutoMCPServer {
 
       try {
         switch (name) {
+          // File operations
+          case 'read_file':
+            return this.handleReadFile(args);
+          case 'write_file':
+            return this.handleWriteFile(args);
+          case 'list_directory':
+            return this.handleListDirectory(args);
+          case 'create_directory':
+            return this.handleCreateDirectory(args);
+          case 'file_exists':
+            return this.handleFileExists(args);
+          // Project operations
           case 'analyze_project':
-            return await this.handleAnalyzeProject(args);
-
+            return this.handleAnalyzeProject(args);
           case 'generate_mock':
-            return await this.handleGenerateMock(args);
-
+            return this.handleGenerateMock(args);
           case 'start_mock_server':
-            return await this.handleStartMockServer(args);
-
-          case 'stop_mock_server':
-            return await this.handleStopMockServer(args);
-
+            return this.handleStartMockServer(args);
           case 'list_projects':
-            return await this.handleListProjects();
-
+            return this.handleListProjects();
           case 'get_llm_config':
-            return await this.handleGetLLMConfig();
-
+            return this.handleGetLLMConfig();
           case 'reload_llm_config':
-            return await this.handleReloadLLMConfig();
-
+            return this.handleReloadLLMConfig();
           default:
             return {
               content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -193,6 +264,63 @@ class MSWAutoMCPServer {
         };
       }
     });
+  }
+
+  // File operation handlers
+  private handleReadFile(args: any) {
+    const { path: filePath } = args;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return {
+      content: [{ type: 'text', text: content }],
+    };
+  }
+
+  private handleWriteFile(args: any) {
+    const { path: filePath, content } = args;
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return {
+      content: [{ type: 'text', text: `File written: ${filePath}` }],
+    };
+  }
+
+  private handleListDirectory(args: any) {
+    const { path: dirPath } = args;
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const result = entries.map(entry => ({
+      name: entry.name,
+      type: entry.isDirectory() ? 'directory' : 'file',
+    }));
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  }
+
+  private handleCreateDirectory(args: any) {
+    const { path: dirPath } = args;
+    fs.mkdirSync(dirPath, { recursive: true });
+    return {
+      content: [{ type: 'text', text: `Directory created: ${dirPath}` }],
+    };
+  }
+
+  private handleFileExists(args: any) {
+    const { path: targetPath } = args;
+    const exists = fs.existsSync(targetPath);
+    const stat = exists ? fs.statSync(targetPath) : null;
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          exists,
+          isDirectory: exists ? stat!.isDirectory() : null,
+          isFile: exists ? stat!.isFile() : null,
+        }, null, 2),
+      }],
+    };
   }
 
   private async handleAnalyzeProject(args: any) {
@@ -226,7 +354,7 @@ class MSWAutoMCPServer {
   }
 
   private async handleGenerateMock(args: any) {
-    const { projectPath, endpoints } = args;
+    const { projectPath, outputPath, endpoints } = args;
 
     const project = projectManager.getProject(projectPath);
     if (!project) {
@@ -274,6 +402,12 @@ class MSWAutoMCPServer {
     // Update project
     projectManager.updateProject(projectPath, { mocks });
 
+    // Write to file if outputPath provided
+    if (outputPath) {
+      const content = `// Auto-generated mocks\n${JSON.stringify(mocks, null, 2)}`;
+      fs.writeFileSync(outputPath, content, 'utf-8');
+    }
+
     return {
       content: [
         {
@@ -281,6 +415,7 @@ class MSWAutoMCPServer {
           text: JSON.stringify({
             success: true,
             generated: mocks.length,
+            outputPath: outputPath || null,
             mocks: mocks.map(m => ({
               method: m.method,
               path: m.path,
@@ -292,7 +427,7 @@ class MSWAutoMCPServer {
     };
   }
 
-  private async handleStartMockServer(args: any) {
+  private handleStartMockServer(args: any) {
     const { projectPath, port } = args;
     const mockPort = port || 3001;
 
@@ -311,23 +446,7 @@ class MSWAutoMCPServer {
     };
   }
 
-  private async handleStopMockServer(args: any) {
-    const { projectPath } = args;
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            success: true,
-            message: `Mock server stopped for ${projectPath}`,
-          }, null, 2),
-        },
-      ],
-    };
-  }
-
-  private async handleListProjects() {
+  private handleListProjects() {
     const projects = projectManager.listProjects();
 
     return {
@@ -347,7 +466,7 @@ class MSWAutoMCPServer {
     };
   }
 
-  private async handleGetLLMConfig() {
+  private handleGetLLMConfig() {
     const config = llmService.getConfig();
 
     return {
@@ -365,7 +484,7 @@ class MSWAutoMCPServer {
     };
   }
 
-  private async handleReloadLLMConfig() {
+  private handleReloadLLMConfig() {
     llmService.reload();
     const config = llmService.getConfig();
 
