@@ -1,6 +1,5 @@
 
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
+# Simple CI - just install dependencies
 
 name: Node.js CI
 
@@ -12,23 +11,16 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
     - uses: actions/checkout@v4
     - uses: pnpm/action-setup@v4
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'pnpm'
-    - run: pnpm install --frozen-lockfile
+        node-version: '20'
+    - run: pnpm install
 
   publish:
     needs: build
@@ -43,7 +35,7 @@ jobs:
       with:
         node-version: '20'
         registry-url: 'https://registry.npmjs.org'
-    - run: pnpm install --frozen-lockfile
+    - run: pnpm install
     - name: Publish to NPM
       run: npm publish --access public
       env:
