@@ -48,7 +48,9 @@ export class ProjectManager {
   private projects: Map<string, Project>;
 
   constructor() {
-    this.configPath = path.join(os.homedir(), '.msw-auto', 'config.json');
+    const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
+    const baseDir = isCI ? process.env.TMPDIR || '/tmp' : os.homedir();
+    this.configPath = path.join(baseDir, '.msw-auto', 'config.json');
     this.projects = new Map();
     this.load();
   }

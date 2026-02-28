@@ -29,7 +29,10 @@ const DEFAULT_CONFIG = {
  */
 export class ConfigManager {
   constructor() {
-    this.configPath = path.join(os.homedir(), '.msw-auto', 'config.json');
+    // Use temp directory in CI, otherwise use home directory
+    const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
+    const baseDir = isCI ? process.env.TMPDIR || '/tmp' : os.homedir();
+    this.configPath = path.join(baseDir, '.msw-auto', 'config.json');
     this.config = this.load();
   }
 
@@ -52,11 +55,15 @@ export class ConfigManager {
    * Save config to file
    */
   save() {
-    const dir = path.dirname(this.configPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    try {
+      const dir = path.dirname(this.configPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
+    } catch {
+      // Ignore save errors in CI or read-only environments
     }
-    fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
   }
 
   /**
