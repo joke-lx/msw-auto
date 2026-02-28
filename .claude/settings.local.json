@@ -3,7 +3,33 @@
     "allow": [
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "WebSearch",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm mcp)",
+      "Bash(timeout 3 pnpm cli --help:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm:*)",
+      "Bash(git push:*)",
+      "Bash(ls -la:*)",
+      "Bash(gh run list:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(node dist/cli/index.js:*)",
+      "Bash(node:*)",
+      "Bash(CI=true pnpm install:*)",
+      "Bash(git tag:*)",
+      "Bash(npm view msw-auto versions --json)",
+      "Bash(npm search msw-auto --json)",
+      "Bash(npm view:*)",
+      "Bash(npm search:*)",
+      "Bash(npm logout:*)",
+      "Bash(npm login --registry=https://registry.npmjs.org)",
+      "Bash(npm config set:*)",
+      "Bash(npm publish:*)",
+      "Bash(gh secret set:*)",
+      "Bash(where:*)",
+      "Bash(npm version patch)"
     ]
   }
 }

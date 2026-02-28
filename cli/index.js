@@ -8,6 +8,13 @@ import { generate } from './commands/generate.js'
 import { importCmd } from './commands/import.js'
 import { menu, showHelp } from './menu.js'
 import { configCmd, modelCmd, showConfig } from './commands/config.js'
+import { setLanguage } from './i18n.js'
+
+// Parse --lang option early
+const langIndex = process.argv.indexOf('--lang')
+if (langIndex !== -1 && process.argv[langIndex + 1]) {
+  setLanguage(process.argv[langIndex + 1])
+}
 
 banner()
 
@@ -24,6 +31,12 @@ if (isInteractive) {
 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
 yargs(process.argv.slice(2))
   .usage('$0 <cmd> [args]')
+  .option('lang', {
+    alias: 'l',
+    type: 'string',
+    description: 'Language: en or zh',
+    choices: ['en', 'zh'],
+  })
   .command(
     'init',
     'Initializes Mock Service Worker at the specified directory',

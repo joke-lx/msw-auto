@@ -1,10 +1,14 @@
 import pc from 'picocolors'
+import { t, getCurrentLang } from './i18n.js'
 
 export function banner() {
+  const lang = getCurrentLang()
+  const version = process.env.MSW_AUTO_VERSION || '2.12.11'
+
   console.log(`
 ${pc.cyan('╔═══════════════════════════════════════════════════════════╗')}
-${pc.cyan('║')}     ${pc.bold(pc.blue('MSW Auto'))} - Intelligent Mock Server                     ${pc.cyan('║')}
-${pc.cyan('║')}     ${pc.dim('Version 2.12.10')}                                     ${pc.cyan('║')}
+${pc.cyan('║')}     ${pc.bold(pc.blue(t('banner.title')))} - ${t('banner.subtitle')}                     ${pc.cyan('║')}
+${pc.cyan('║')}     ${pc.dim('Version ' + version)}                                     ${pc.cyan('║')}
 ${pc.cyan('╚═══════════════════════════════════════════════════════════╝')}
 ${pc.dim('━'.repeat(62))}
 `)

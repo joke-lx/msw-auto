@@ -7,6 +7,7 @@
 import { ConfigManager } from '../config.js';
 import { success, error, info } from '../banner.js';
 import chalk from 'chalk';
+import { t, getCurrentLang } from '../i18n.js';
 
 const configManager = new ConfigManager();
 
@@ -15,22 +16,20 @@ const configManager = new ConfigManager();
  */
 export async function showConfig() {
   const config = configManager.getLLMConfig();
+  const lang = getCurrentLang();
 
-  console.log(chalk.blue('\n=== LLM Configuration ===\n'));
-  console.log(chalk.white(`Provider: ${chalk.cyan(config.provider)}`));
-  console.log(chalk.white(`Base URL: ${chalk.cyan(config.baseUrl)}`));
-  console.log(chalk.white(`Model: ${chalk.cyan(config.model)}`));
-  console.log(chalk.white(`API Key: ${config.apiKey ? chalk.cyan('********' + config.apiKey.slice(-4)) : chalk.red('Not set')}`));
-  console.log(chalk.white(`Temperature: ${chalk.cyan(config.temperature || 0.7)}`));
-  console.log(chalk.white(`Max Tokens: ${chalk.cyan(config.maxTokens || 4096)}`));
+  console.log(chalk.blue(`\n=== ${t('config.title')} ===\n`));
+  console.log(chalk.white(`${t('config.provider')}: ${chalk.cyan(config.provider)}`));
+  console.log(chalk.white(`${t('config.baseUrl')}: ${chalk.cyan(config.baseUrl)}`));
+  console.log(chalk.white(`${t('config.model')}: ${chalk.cyan(config.model)}`));
+  console.log(chalk.white(`${t('config.apiKey')}: ${config.apiKey ? chalk.cyan('********' + config.apiKey.slice(-4)) : chalk.red(t('config.notSet'))}`));
 
   const configPath = configManager.getConfigPath();
   console.log(chalk.dim(`\nConfig file: ${configPath}`));
 
   // Check if configured
   if (!config.apiKey) {
-    console.log(chalk.yellow('\nWarning: API key not set. Run:'));
-    console.log(chalk.white(`  msw-auto setting --apikey YOUR_API_KEY`));
+    console.log(chalk.yellow(`\n${t('config.warning')}: ${t('config.runSetting')}`));
   }
 }
 
@@ -57,21 +56,17 @@ export async function configCmd(argv) {
     configManager.setApiKey(apikey);
     success(`API key updated`);
   }
-
-  // If no options, show current config
-  if (!provider && !baseurl && !apikey) {
-    await showConfig();
-  }
 }
 
 /**
- * Switch model
+ * Switch LLM model
  */
 export async function modelCmd(model) {
-  configManager.setModel(model);
-  success(`Model switched to: ${model}`);
+  if (!model) {
+    error('Model name is required');
+    return;
+  }
 
-  const config = configManager.getLLMConfig();
-  info(`Provider: ${config.provider}`);
-  info(`Base URL: ${config.baseUrl}`);
+  configManager.setModel(model);
+  success(`Model set to: ${model}`);
 }
