@@ -24,7 +24,7 @@
 - **Powerful Mocking** - Built on MSW, supports REST, GraphQL, and WebSocket
 - **Web UI Management** - Intuitive graphical interface for managing Mock configurations
 - **AI Generation** - Auto-generate Mock data using LLM
-- **MCP Tool Service** - Provides MCP protocol tools for AI integration
+- **MCP Tool Service** - Provides local file operations and AI integration tools
 - **Multi-LLM Support** - Supports Anthropic, OpenAI, and more
 - **Import Support** - Import API definitions from Postman and Swagger
 - **Theme Switching** - Light/Dark theme with one-click toggle
@@ -110,7 +110,19 @@ npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --ap
 
 ## MCP Service
 
-MCP Server provides the following tools for AI integration (e.g., Claude Code):
+MCP Server provides the following tools for any MCP-compatible AI client:
+
+### File Operations
+
+| Tool | Description |
+|------|-------------|
+| `read_file` | Read file content |
+| `write_file` | Write file content |
+| `list_directory` | List directory contents |
+| `create_directory` | Create a directory |
+| `file_exists` | Check if file/directory exists |
+
+### Project Operations
 
 | Tool | Description |
 |------|-------------|
@@ -123,7 +135,7 @@ MCP Server provides the following tools for AI integration (e.g., Claude Code):
 
 ### MCP Configuration
 
-Configure in Claude Code with `mcp.json`:
+Configure in any MCP-compatible AI client:
 
 ```json
 {
@@ -146,24 +158,31 @@ Configure in Claude Code with `mcp.json`:
 ## Architecture
 
 ```
-CLI / Web UI
-    │
-    ├── setting --provider openai   → Configure LLM
-    ├── model gpt-4o               → Switch model
-    └── interactive                → Interactive menu
-            │
-            ▼
-    MCP Server (Tool Service)
-            │
-            ├── analyze_project    → Analyze code
-            ├── generate_mock     → Generate Mock ──► LLM API
-            └── start_mock_server → Start server
-                    │
-                    ▼
-            LLM Service (Multi-Provider)
-                    ├── Anthropic (Claude)
-                    ├── OpenAI (GPT-4)
-                    └── Custom API
+┌─────────────────────────────────────────────────────────────┐
+│                        MSW Auto                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   CLI / Web UI                                              │
+│       │                                                      │
+│       ├── setting --provider xxx   → Configure LLM            │
+│       └── interactive             → Interactive menu          │
+│               │                                              │
+│               ▼                                              │
+│       MCP Server (Local Tool Service)                       │
+│               │                                              │
+│               ├── File Operations                           │
+│               │   ├── read_file                             │
+│               │   ├── write_file                            │
+│               │   ├── list_directory                        │
+│               │   └── create_directory                      │
+│               │                                              │
+│               ├── AI Generation                             │
+│               │   └── generate_mock ──► LLM API            │
+│               │                                              │
+│               └── Project Analysis                          │
+│                   └── analyze_project                        │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Documentation

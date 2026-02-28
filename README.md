@@ -24,7 +24,7 @@
 - **强大的 Mock 能力** - 基于 MSW，支持 REST、GraphQL 和 WebSocket
 - **Web UI 管理** - 直观的图形界面管理 Mock 配置
 - **AI 生成** - 使用 LLM 自动生成 Mock 数据
-- **MCP 工具服务** - 提供 MCP 协议工具，支持 AI 集成
+- **MCP 工具服务** - 提供本地文件操作和 AI 集成工具
 - **多 LLM 支持** - 支持 Anthropic、OpenAI 等
 - **导入支持** - 支持从 Postman 和 Swagger 导入 API 定义
 - **主题切换** - 支持浅色/深色主题，一键切换
@@ -110,7 +110,19 @@ npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --ap
 
 ## MCP 服务
 
-MCP Server 提供以下工具，可供 Claude Code 等 AI 工具集成：
+MCP Server 提供以下工具，可供任何支持 MCP 协议的 AI 集成：
+
+### 文件操作
+
+| 工具 | 描述 |
+|------|------|
+| `read_file` | 读取文件内容 |
+| `write_file` | 写入文件内容 |
+| `list_directory` | 列出目录内容 |
+| `create_directory` | 创建目录 |
+| `file_exists` | 检查文件/目录是否存在 |
+
+### 项目操作
 
 | 工具 | 描述 |
 |------|------|
@@ -123,7 +135,7 @@ MCP Server 提供以下工具，可供 Claude Code 等 AI 工具集成：
 
 ### MCP 配置
 
-在 Claude Code 中配置 `mcp.json`：
+在支持 MCP 的 AI 客户端中配置：
 
 ```json
 {
@@ -146,24 +158,31 @@ MCP Server 提供以下工具，可供 Claude Code 等 AI 工具集成：
 ## 架构
 
 ```
-CLI / Web UI
-    │
-    ├── setting --provider openai   → 配置 LLM
-    ├── model gpt-4o               → 切换模型
-    └── interactive                → 交互式菜单
-            │
-            ▼
-    MCP Server (工具服务)
-            │
-            ├── analyze_project    → 分析代码
-            ├── generate_mock     → 生成 Mock ──► LLM API
-            └── start_mock_server → 启动服务
-                    │
-                    ▼
-            LLM Service (多提供商)
-                    ├── Anthropic (Claude)
-                    ├── OpenAI (GPT-4)
-                    └── 自定义 API
+┌─────────────────────────────────────────────────────────────┐
+│                        MSW Auto                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   CLI / Web UI                                              │
+│       │                                                      │
+│       ├── setting --provider xxx   → 配置 LLM                 │
+│       └── interactive             → 交互菜单                   │
+│               │                                              │
+│               ▼                                              │
+│       MCP Server (本地工具服务)                              │
+│               │                                              │
+│               ├── 文件操作                                    │
+│               │   ├── read_file                              │
+│               │   ├── write_file                             │
+│               │   ├── list_directory                         │
+│               │   └── create_directory                      │
+│               │                                              │
+│               ├── AI 生成                                    │
+│               │   └── generate_mock ──► LLM API            │
+│               │                                              │
+│               └── 项目分析                                    │
+│                   └── analyze_project                        │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## 文档
