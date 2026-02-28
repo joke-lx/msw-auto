@@ -148,8 +148,8 @@ yargs(process.argv.slice(2))
       yargs
         .option('provider', {
           type: 'string',
-          description: 'LLM provider (anthropic, openai, qwen, custom)',
-          choices: ['anthropic', 'openai', 'qwen', 'custom'],
+          description: 'LLM provider (anthropic, openai, custom)',
+          choices: ['anthropic', 'openai', 'custom'],
         })
         .option('baseurl', {
           type: 'string',

@@ -87,10 +87,6 @@ export class ConfigManager {
         baseUrl: 'https://api.openai.com/v1',
         model: 'gpt-4o',
       },
-      qwen: {
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen-turbo',
-      },
       custom: {
         baseUrl: '',
         model: '',
