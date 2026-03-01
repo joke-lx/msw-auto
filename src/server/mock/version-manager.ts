@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import type { Database } from '../storage/database.js'
 
 export interface MockVersion {
@@ -24,7 +25,7 @@ export class VersionManager {
     const versionNumber = versions.length > 0 ? Math.max(...versions.map(v => v.version)) + 1 : 1
 
     const version: MockVersion = {
-      id: `ver_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `ver_${crypto.randomUUID()}`,
       mock_id: mockId,
       version: versionNumber,
       response,

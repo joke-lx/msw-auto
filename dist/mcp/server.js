@@ -7,6 +7,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import * as fs4 from "fs";
 import * as path4 from "path";
+import { fileURLToPath } from "url";
+import { spawn } from "child_process";
 
 // src/mcp/analyzer.js
 import * as fs from "fs";
@@ -422,6 +424,8 @@ var ProjectManager = class {
 
 // src/mcp/server.ts
 var projectManager = new ProjectManager();
+var runningServers = /* @__PURE__ */ new Map();
+var projectRoot = path4.resolve(path4.dirname(fileURLToPath(import.meta.url)), "../..");
 var MSWAutoMCPServer = class {
   server;
   constructor() {
@@ -801,13 +805,78 @@ ${JSON.stringify(mocks, null, 2)}`;
   handleStartMockServer(args) {
     const { projectPath, port } = args;
     const mockPort = port || 3001;
+    const serverKey = projectPath || "default";
+    if (runningServers.has(serverKey)) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              message: `Mock server already running for ${serverKey}`,
+              port: mockPort,
+              url: `http://localhost:${mockPort}`
+            }, null, 2)
+          }
+        ]
+      };
+    }
+    const serverPath = path4.resolve(projectRoot, "src/server/index.ts");
+    if (!fs4.existsSync(serverPath)) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              message: `Server not found at ${serverPath}`
+            }, null, 2)
+          }
+        ],
+        isError: true
+      };
+    }
+    const serverProcess = spawn("npx", ["tsx", serverPath, "--port", mockPort.toString()], {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PORT: mockPort.toString()
+      }
+    });
+    runningServers.set(serverKey, serverProcess);
+    serverProcess.stdout?.on("data", (data) => {
+      console.error(`[Mock Server] ${data}`);
+    });
+    serverProcess.stderr?.on("data", (data) => {
+      console.error(`[Mock Server Error] ${data}`);
+    });
+    serverProcess.on("exit", (code) => {
+      runningServers.delete(serverKey);
+      console.error(`[Mock Server] Exited with code ${code}`);
+    });
+    setTimeout(() => {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              message: `Mock server started`,
+              port: mockPort,
+              url: `http://localhost:${mockPort}`
+            }, null, 2)
+          }
+        ]
+      };
+    }, 1e3);
     return {
       content: [
         {
           type: "text",
           text: JSON.stringify({
             success: true,
-            message: `Mock server started`,
+            message: `Mock server starting...`,
             port: mockPort,
             url: `http://localhost:${mockPort}`
           }, null, 2)

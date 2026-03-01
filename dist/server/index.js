@@ -5,12 +5,15 @@ import { createServer } from "http";
 import { WebSocketServer as WebSocketServer2 } from "ws";
 
 // src/server/mock/manager.ts
+import crypto from "crypto";
 var MockManager = class {
+  // 全局开关，默认开启
   constructor(database) {
     this.database = database;
     this.loadMocks();
   }
   mocks = /* @__PURE__ */ new Map();
+  globalEnabled = true;
   async loadMocks() {
     try {
       const mocks = await this.database.getAllMocks();
@@ -23,7 +26,7 @@ var MockManager = class {
   }
   async create(dto) {
     const mock = {
-      id: `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `mock_${crypto.randomUUID()}`,
       name: dto.name,
       method: dto.method.toUpperCase(),
       path: dto.path,
@@ -85,7 +88,21 @@ var MockManager = class {
   async findEnabled() {
     return Array.from(this.mocks.values()).filter((mock) => mock.enabled);
   }
+  // 全局开关相关方法
+  isGlobalEnabled() {
+    return this.globalEnabled;
+  }
+  setGlobalEnabled(enabled) {
+    this.globalEnabled = enabled;
+  }
+  toggleGlobal() {
+    this.globalEnabled = !this.globalEnabled;
+    return this.globalEnabled;
+  }
   findMatchingMock(method, path2) {
+    if (!this.globalEnabled) {
+      return null;
+    }
     const enabledMocks = Array.from(this.mocks.values()).filter((mock) => mock.enabled);
     for (const mock of enabledMocks) {
       if (this.isMatch(method, path2, mock)) {
@@ -146,22 +163,86 @@ var MockManager = class {
 // src/server/storage/database.ts
 import fs from "fs";
 import path from "path";
-var Database = class _Database {
+var InMemoryStorage = class {
+  mocks = /* @__PURE__ */ new Map();
+  versions = /* @__PURE__ */ new Map();
+  requestLogs = [];
+  // Mock 操作
+  async getAllMocks() {
+    return Array.from(this.mocks.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }
+  async getMockById(id) {
+    return this.mocks.get(id) || null;
+  }
+  async saveMock(mock) {
+    this.mocks.set(mock.id, mock);
+  }
+  async updateMock(mock) {
+    this.mocks.set(mock.id, mock);
+  }
+  async deleteMock(id) {
+    this.mocks.delete(id);
+    this.versions.delete(id);
+  }
+  // Version 操作
+  async saveMockVersion(version) {
+    const existing = this.versions.get(version.mock_id) || [];
+    existing.push(version);
+    this.versions.set(version.mock_id, existing);
+  }
+  async getMockVersions(mockId) {
+    return (this.versions.get(mockId) || []).sort((a, b) => b.version - a.version);
+  }
+  async getMockVersion(mockId, version) {
+    const versions = this.versions.get(mockId) || [];
+    return versions.find((v) => v.version === version) || null;
+  }
+  async deleteMockVersion(id) {
+    for (const [mockId, versions] of this.versions) {
+      this.versions.set(mockId, versions.filter((v) => v.id !== id));
+    }
+  }
+  // Request log 操作
+  async saveRequestLog(log) {
+    this.requestLogs.unshift(log);
+    if (this.requestLogs.length > 1e3) {
+      this.requestLogs = this.requestLogs.slice(0, 1e3);
+    }
+  }
+  async getRecentRequests(limit) {
+    return this.requestLogs.slice(0, limit);
+  }
+};
+var Database = class {
   db = null;
   dbPath;
+  memory;
+  useMemory = false;
   constructor(dbPath) {
     this.dbPath = dbPath;
+    this.memory = new InMemoryStorage();
   }
   async connect() {
-    const dir = path.dirname(this.dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    try {
+      const Database2 = (await import("better-sqlite3")).default;
+      const dir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      this.db = new Database2(this.dbPath);
+      this.db.pragma("journal_mode = WAL");
+      this.initSchema();
+      console.log("[Database] Connected to SQLite");
+    } catch (error) {
+      console.warn("[Database] Using in-memory storage (SQLite not available)");
+      this.useMemory = true;
+      this.db = null;
     }
-    this.db = new _Database(this.dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.initSchema();
   }
   initSchema() {
+    if (!this.db) return;
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mocks (
         id TEXT PRIMARY KEY,
@@ -214,140 +295,188 @@ var Database = class _Database {
   }
   // ============ Mock Operations ============
   async getAllMocks() {
-    const rows = this.db.prepare("SELECT * FROM mocks ORDER BY created_at DESC").all();
-    return rows.map(this.mapRowToMock);
+    if (this.useMemory) return this.memory.getAllMocks();
+    try {
+      const rows = this.db.prepare("SELECT * FROM mocks ORDER BY created_at DESC").all();
+      return rows.map(this.mapRowToMock);
+    } catch {
+      return [];
+    }
   }
   async getMockById(id) {
-    const row = this.db.prepare("SELECT * FROM mocks WHERE id = ?").get(id);
-    return row ? this.mapRowToMock(row) : null;
+    if (this.useMemory) return this.memory.getMockById(id);
+    try {
+      const row = this.db.prepare("SELECT * FROM mocks WHERE id = ?").get(id);
+      return row ? this.mapRowToMock(row) : null;
+    } catch {
+      return null;
+    }
   }
   async saveMock(mock) {
-    const stmt = this.db.prepare(`
-      INSERT INTO mocks (id, name, method, path, status, response, headers, cookies, delay, enabled, description, tags, version, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(
-      mock.id,
-      mock.name,
-      mock.method,
-      mock.path,
-      mock.status,
-      JSON.stringify(mock.response),
-      mock.headers ? JSON.stringify(mock.headers) : null,
-      mock.cookies ? JSON.stringify(mock.cookies) : null,
-      mock.delay || 0,
-      mock.enabled ? 1 : 0,
-      mock.description || null,
-      mock.tags ? mock.tags.join(",") : null,
-      mock.version,
-      mock.created_at,
-      mock.updated_at
-    );
+    if (this.useMemory) return this.memory.saveMock(mock);
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO mocks (id, name, method, path, status, response, headers, cookies, delay, enabled, description, tags, version, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        mock.id,
+        mock.name,
+        mock.method,
+        mock.path,
+        mock.status,
+        JSON.stringify(mock.response),
+        mock.headers ? JSON.stringify(mock.headers) : null,
+        mock.cookies ? JSON.stringify(mock.cookies) : null,
+        mock.delay || 0,
+        mock.enabled ? 1 : 0,
+        mock.description || null,
+        mock.tags ? mock.tags.join(",") : null,
+        mock.version,
+        mock.created_at,
+        mock.updated_at
+      );
+    } catch {
+    }
   }
   async updateMock(mock) {
-    const stmt = this.db.prepare(`
-      UPDATE mocks SET
-        name = ?, method = ?, path = ?, status = ?, response = ?,
+    if (this.useMemory) return this.memory.updateMock(mock);
+    try {
+      const stmt = this.db.prepare(`
+        UPDATE mocks SET name = ?, method = ?, path = ?, status = ?, response = ?,
         headers = ?, cookies = ?, delay = ?, enabled = ?,
         description = ?, tags = ?, version = ?, updated_at = ?
-      WHERE id = ?
-    `);
-    stmt.run(
-      mock.name,
-      mock.method,
-      mock.path,
-      mock.status,
-      JSON.stringify(mock.response),
-      mock.headers ? JSON.stringify(mock.headers) : null,
-      mock.cookies ? JSON.stringify(mock.cookies) : null,
-      mock.delay || 0,
-      mock.enabled ? 1 : 0,
-      mock.description || null,
-      mock.tags ? mock.tags.join(",") : null,
-      mock.version,
-      mock.updated_at,
-      mock.id
-    );
+        WHERE id = ?
+      `);
+      stmt.run(
+        mock.name,
+        mock.method,
+        mock.path,
+        mock.status,
+        JSON.stringify(mock.response),
+        mock.headers ? JSON.stringify(mock.headers) : null,
+        mock.cookies ? JSON.stringify(mock.cookies) : null,
+        mock.delay || 0,
+        mock.enabled ? 1 : 0,
+        mock.description || null,
+        mock.tags ? mock.tags.join(",") : null,
+        mock.version,
+        mock.updated_at,
+        mock.id
+      );
+    } catch {
+    }
   }
   async deleteMock(id) {
-    this.db.prepare("DELETE FROM mock_versions WHERE mock_id = ?").run(id);
-    this.db.prepare("DELETE FROM mocks WHERE id = ?").run(id);
+    if (this.useMemory) return this.memory.deleteMock(id);
+    try {
+      this.db.prepare("DELETE FROM mock_versions WHERE mock_id = ?").run(id);
+      this.db.prepare("DELETE FROM mocks WHERE id = ?").run(id);
+    } catch {
+    }
   }
   // ============ Version Operations ============
   async saveMockVersion(version) {
-    const stmt = this.db.prepare(`
-      INSERT INTO mock_versions (id, mock_id, version, response, headers, description, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(
-      version.id,
-      version.mock_id,
-      version.version,
-      JSON.stringify(version.response),
-      version.headers ? JSON.stringify(version.headers) : null,
-      version.description || null,
-      version.created_at
-    );
+    if (this.useMemory) return this.memory.saveMockVersion(version);
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO mock_versions (id, mock_id, version, response, headers, description, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        version.id,
+        version.mock_id,
+        version.version,
+        JSON.stringify(version.response),
+        version.headers ? JSON.stringify(version.headers) : null,
+        version.description || null,
+        version.created_at
+      );
+    } catch {
+    }
   }
   async getMockVersions(mockId) {
-    const rows = this.db.prepare("SELECT * FROM mock_versions WHERE mock_id = ? ORDER BY version DESC").all(mockId);
-    return rows.map((row) => ({
-      id: row.id,
-      mock_id: row.mock_id,
-      version: row.version,
-      response: JSON.parse(row.response),
-      headers: row.headers ? JSON.parse(row.headers) : void 0,
-      description: row.description,
-      created_at: row.created_at
-    }));
+    if (this.useMemory) return this.memory.getMockVersions(mockId);
+    try {
+      const rows = this.db.prepare("SELECT * FROM mock_versions WHERE mock_id = ? ORDER BY version DESC").all(mockId);
+      return rows.map((row) => ({
+        id: row.id,
+        mock_id: row.mock_id,
+        version: row.version,
+        response: JSON.parse(row.response),
+        headers: row.headers ? JSON.parse(row.headers) : void 0,
+        description: row.description,
+        created_at: row.created_at
+      }));
+    } catch {
+      return [];
+    }
   }
   async getMockVersion(mockId, version) {
-    const row = this.db.prepare("SELECT * FROM mock_versions WHERE mock_id = ? AND version = ?").get(mockId, version);
-    if (!row) return null;
-    return {
-      id: row.id,
-      mock_id: row.mock_id,
-      version: row.version,
-      response: JSON.parse(row.response),
-      headers: row.headers ? JSON.parse(row.headers) : void 0,
-      description: row.description,
-      created_at: row.created_at
-    };
+    if (this.useMemory) return this.memory.getMockVersion(mockId, version);
+    try {
+      const row = this.db.prepare("SELECT * FROM mock_versions WHERE mock_id = ? AND version = ?").get(mockId, version);
+      if (!row) return null;
+      return {
+        id: row.id,
+        mock_id: row.mock_id,
+        version: row.version,
+        response: JSON.parse(row.response),
+        headers: row.headers ? JSON.parse(row.headers) : void 0,
+        description: row.description,
+        created_at: row.created_at
+      };
+    } catch {
+      return null;
+    }
   }
   async deleteMockVersion(id) {
-    this.db.prepare("DELETE FROM mock_versions WHERE id = ?").run(id);
+    if (this.useMemory) return this.memory.deleteMockVersion(id);
+    try {
+      this.db.prepare("DELETE FROM mock_versions WHERE id = ?").run(id);
+    } catch {
+    }
   }
   // ============ Request Log Operations ============
   async saveRequestLog(log) {
-    const stmt = this.db.prepare(`
-      INSERT INTO request_logs (id, method, path, query, headers, body, response_status, response_body, response_time, is_mocked, mock_id, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(
-      log.id,
-      log.method,
-      log.path,
-      log.query ? JSON.stringify(log.query) : null,
-      log.headers ? JSON.stringify(log.headers) : null,
-      log.body ? JSON.stringify(log.body) : null,
-      log.response_status,
-      log.response_body ? JSON.stringify(log.response_body) : null,
-      log.response_time,
-      log.is_mocked ? 1 : 0,
-      log.mock_id || null,
-      log.timestamp
-    );
+    if (this.useMemory) return this.memory.saveRequestLog(log);
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO request_logs (id, method, path, query, headers, body, response_status, response_body, response_time, is_mocked, mock_id, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        log.id,
+        log.method,
+        log.path,
+        log.query ? JSON.stringify(log.query) : null,
+        log.headers ? JSON.stringify(log.headers) : null,
+        log.body ? JSON.stringify(log.body) : null,
+        log.response_status,
+        log.response_body ? JSON.stringify(log.response_body) : null,
+        log.response_time,
+        log.is_mocked ? 1 : 0,
+        log.mock_id || null,
+        log.timestamp
+      );
+    } catch {
+    }
   }
   async getRecentRequests(limit = 100) {
-    const rows = this.db.prepare("SELECT * FROM request_logs ORDER BY timestamp DESC LIMIT ?").all(limit);
-    return rows.map((row) => ({
-      ...row,
-      headers: row.headers ? JSON.parse(row.headers) : null,
-      query: row.query ? JSON.parse(row.query) : null,
-      body: row.body ? JSON.parse(row.body) : null,
-      response_body: row.response_body ? JSON.parse(row.response_body) : null,
-      is_mocked: row.is_mocked === 1
-    }));
+    if (this.useMemory) return this.memory.getRecentRequests(limit);
+    try {
+      const rows = this.db.prepare("SELECT * FROM request_logs ORDER BY timestamp DESC LIMIT ?").all(limit);
+      return rows.map((row) => ({
+        ...row,
+        headers: row.headers ? JSON.parse(row.headers) : null,
+        query: row.query ? JSON.parse(row.query) : null,
+        body: row.body ? JSON.parse(row.body) : null,
+        response_body: row.response_body ? JSON.parse(row.response_body) : null,
+        is_mocked: row.is_mocked === 1
+      }));
+    } catch {
+      return [];
+    }
   }
   // ============ Helpers ============
   mapRowToMock(row) {
@@ -370,11 +499,16 @@ var Database = class _Database {
     };
   }
   close() {
-    this.db?.close();
+    if (this.db) this.db.close();
   }
 };
 
+// src/server/routes/index.ts
+import crypto3 from "crypto";
+import http from "http";
+
 // src/server/mock/version-manager.ts
+import crypto2 from "crypto";
 var VersionManager = class {
   database;
   maxVersions = 10;
@@ -385,7 +519,7 @@ var VersionManager = class {
     const versions = await this.database.getMockVersions(mockId);
     const versionNumber = versions.length > 0 ? Math.max(...versions.map((v) => v.version)) + 1 : 1;
     const version = {
-      id: `ver_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `ver_${crypto2.randomUUID()}`,
       mock_id: mockId,
       version: versionNumber,
       response,
@@ -672,7 +806,24 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
   const versionManager = new VersionManager(database);
   const importer = new ImportExporter();
   app.get("/health", (req, res) => {
-    res.json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+    res.json({
+      status: "ok",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      globalEnabled: mockManager.isGlobalEnabled()
+    });
+  });
+  app.get("/api/global-toggle", (req, res) => {
+    res.json({ enabled: mockManager.isGlobalEnabled() });
+  });
+  app.post("/api/global-toggle", (req, res) => {
+    const { enabled } = req.body;
+    if (typeof enabled === "boolean") {
+      mockManager.setGlobalEnabled(enabled);
+      res.json({ enabled: mockManager.isGlobalEnabled() });
+    } else {
+      const newState = mockManager.toggleGlobal();
+      res.json({ enabled: newState });
+    }
   });
   app.get("/api/mocks", async (req, res) => {
     try {
@@ -957,7 +1108,8 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
         totalMocks: mocks.length,
         activeMocks: enabledMocks,
         disabledMocks: mocks.length - enabledMocks,
-        aiEnabled: claudeClient2.isEnabled()
+        aiEnabled: claudeClient2.isEnabled(),
+        globalEnabled: mockManager.isGlobalEnabled()
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -982,7 +1134,7 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
       }
       const duration = Date.now() - startTime;
       await database.saveRequestLog({
-        id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `req_${crypto3.randomUUID()}`,
         method: req.method,
         path: req.path,
         query: req.query,
@@ -1004,13 +1156,38 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
       console.log(
         `${pc2.gray((/* @__PURE__ */ new Date()).toISOString())} ${pc2.blue(req.method)} ${pc2.yellow(req.path)} ${pc2.cyan("Proxy")}`
       );
-      return res.status(404).json({
-        error: "Not Found",
-        message: "No mock found and proxy not fully configured"
+      const targetUrl = new URL(req.path, config.backendUrl);
+      const proxyReq = http.request({
+        hostname: targetUrl.hostname,
+        port: targetUrl.port || 80,
+        path: targetUrl.pathname + targetUrl.search,
+        method: req.method,
+        headers: {
+          ...req.headers,
+          host: targetUrl.host
+        }
+      }, (proxyRes) => {
+        res.status(proxyRes.statusCode || 200);
+        proxyRes.headers && Object.entries(proxyRes.headers).forEach(([key, value]) => {
+          if (value) res.setHeader(key, value);
+        });
+        proxyRes.pipe(res);
       });
+      proxyReq.on("error", (err) => {
+        console.error(pc2.red(`[Proxy] Error: ${err.message}`));
+        res.status(502).json({
+          error: "Bad Gateway",
+          message: `Failed to proxy request: ${err.message}`
+        });
+      });
+      if (req.body && Object.keys(req.body).length > 0) {
+        proxyReq.write(JSON.stringify(req.body));
+      }
+      proxyReq.end();
+      return;
     }
     await database.saveRequestLog({
-      id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `req_${crypto3.randomUUID()}`,
       method: req.method,
       path: req.path,
       query: req.query,
@@ -1032,11 +1209,12 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
 
 // src/server/websocket/index.ts
 import { WebSocket } from "ws";
+import crypto4 from "crypto";
 import pc3 from "picocolors";
 function setupWebSocket(wss, mockManager, database) {
   const clients = /* @__PURE__ */ new Map();
   wss.on("connection", (ws) => {
-    const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const clientId = `client_${crypto4.randomUUID()}`;
     const client = {
       id: clientId,
       ws
@@ -1732,7 +1910,8 @@ ${pc5.yellow("Press Ctrl+C to stop the server")}
     console.log(pc5.yellow("[Server] Stopped"));
   }
 };
-if (import.meta.url === `file://${process.argv[1]}`) {
+var isMain = import.meta.url.includes("index.js") || import.meta.url.includes("index.ts") || process.argv[1]?.includes("server");
+if (isMain) {
   const server = new MockServer();
   server.start();
   process.on("SIGINT", () => {

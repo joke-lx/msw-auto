@@ -145,8 +145,13 @@ async function startWebMenu() {
 
   const spinner = ora(t('menu.starting')).start();
   try {
-    // TODO: Start web UI server
-    spinner.succeed('Web UI feature coming soon');
+    const serverPath = getServerPath();
+    const webDir = path.resolve(path.dirname(serverPath), 'web');
+    await execAsync(`npx vite --port ${port}`, {
+      cwd: webDir,
+      stdio: 'inherit'
+    });
+    spinner.succeed(t('menu.success'));
   } catch (error) {
     spinner.fail(t('menu.failed'));
     console.error(error.message);
