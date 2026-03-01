@@ -158,8 +158,12 @@ ${pc.yellow('Press Ctrl+C to stop the server')}
   }
 }
 
-// Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run if called directly - support multiple ways to run
+const isMain = import.meta.url.includes('index.js') ||
+               import.meta.url.includes('index.ts') ||
+               process.argv[1]?.includes('server')
+
+if (isMain) {
   const server = new MockServer()
 
   server.start()

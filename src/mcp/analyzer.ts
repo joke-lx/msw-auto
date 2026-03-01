@@ -13,6 +13,7 @@ export interface Endpoint {
   file?: string;
   handler?: string;
   framework?: string;
+  source?: 'frontend' | 'backend';
 }
 
 export interface ProjectAnalysis {
@@ -53,6 +54,9 @@ export async function analyzeProject(
 
   // Analyze directory recursively
   await analyzeDirectory(projectPath, patterns, endpoints, frameworks);
+
+  // Analyze frontend API calls (axios, fetch, XMLHttpRequest)
+  await analyzeFrontendCalls(projectPath, endpoints, frameworks);
 
   // If proxy URL is provided, try to get OpenAPI/Swagger spec
   if (proxyUrl) {
@@ -114,6 +118,87 @@ function shouldSkipDirectory(name: string): boolean {
     'vendor',
   ];
   return skipDirs.includes(name);
+}
+
+/**
+ * Analyze frontend code for API calls (axios, fetch, XMLHttpRequest)
+ */
+async function analyzeFrontendCalls(
+  dirPath: string,
+  endpoints: Endpoint[],
+  frameworks: string[]
+): Promise<void> {
+  if (!fs.existsSync(dirPath)) return;
+
+  const frontendPatterns = [
+    // axios.get(url), axios.post(url), etc.
+    { pattern: /axios\.(get|post|put|patch|delete|head|options)\s*\(\s*['"`]([^'"`]+)['"`]/g, library: 'axios' },
+    // axios.request({ url, method })
+    { pattern: /axios\.request\s*\(\s*\{\s*[^}]*url:\s*['"`]([^'"`]+)['"`][^}]*method:\s*['"`]([^'"`]+)['"`]/g, library: 'axios' },
+    // fetch(url, options)
+    { pattern: /fetch\s*\(\s*['"`]([^'"`]+)['"`]/g, library: 'fetch' },
+    // XMLHttpRequest.open(method, url)
+    { pattern: /(?:xhr|request|xmlHttp)\.open\s*\(\s*['"`](GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)['"`]?\s*,\s*['"`]([^'"`]+)['"`]/g, library: 'xhr' },
+  ];
+
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+
+    if (entry.isDirectory()) {
+      if (shouldSkipDirectory(entry.name)) continue;
+      await analyzeFrontendCalls(fullPath, endpoints, frameworks);
+    } else if (entry.isFile() && isSourceFile(entry.name)) {
+      try {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+
+        for (const { pattern, library } of frontendPatterns) {
+          let match;
+          const regex = new RegExp(pattern.source, pattern.flags);
+
+          while ((match = regex.exec(content)) !== null) {
+            frameworks.push(`frontend-${library}`);
+
+            let method = 'GET';
+            let endpointPath = match[1];
+
+            // Extract method and path based on library
+            if (library === 'axios') {
+              if (match[2] && ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'].includes(match[1])) {
+                method = match[1].toUpperCase();
+                endpointPath = match[2];
+              } else if (match[2] && match[3]) {
+                method = match[2].toUpperCase();
+                endpointPath = match[1];
+              }
+            } else if (library === 'fetch') {
+              method = 'GET';
+              endpointPath = match[1];
+            } else if (library === 'xhr') {
+              method = match[1].toUpperCase();
+              endpointPath = match[2];
+            }
+
+            // Clean up template literals like `/api/users/${id}`
+            endpointPath = endpointPath.replace(/\$\{[^}]+\}/g, ':param');
+
+            const endpoint: Endpoint = {
+              framework: library,
+              source: 'frontend',
+              file: fullPath,
+              method,
+              path: endpointPath,
+            };
+
+            endpoints.push(endpoint);
+          }
+        }
+      } catch {
+        // Ignore file read errors
+      }
+    }
+  }
 }
 
 function isSourceFile(filename: string): boolean {

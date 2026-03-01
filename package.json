@@ -3,6 +3,11 @@
   "version": "2.12.14",
   "description": "Intelligent automated Mock server with Web UI and AI generation capabilities",
   "type": "module",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  },
   "bin": {
     "msw-auto": "dist/cli/index.js"
   },
@@ -40,12 +45,12 @@
     "@inquirer/select": "^5.0.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@mswjs/interceptors": "^0.41.2",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "11.8.1",
     "chalk": "^5.3.0",
     "cli-progress": "^3.12.0",
     "clui": "^0.3.6",
     "cors": "^2.8.5",
-    "express": "^5.1.0",
+    "express": "4.21.0",
     "ora": "^6.3.1",
     "picocolors": "^1.1.1",
     "ws": "^8.18.0",
