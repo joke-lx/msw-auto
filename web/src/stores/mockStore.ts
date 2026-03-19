@@ -28,10 +28,13 @@ export interface RequestLog {
 interface MockState {
   mocks: Mock[]
   requestLogs: RequestLog[]
+  globalEnabled: boolean
   addMock: (mock: Mock) => void
   updateMock: (id: string, mock: Partial<Mock>) => void
   deleteMock: (id: string) => void
   toggleMock: (id: string) => void
+  toggleGlobal: () => void
+  setGlobalEnabled: (enabled: boolean) => void
   addRequestLog: (log: RequestLog) => void
   clearRequestLogs: () => void
 }
@@ -41,6 +44,7 @@ export const useMockStore = create<MockState>()(
     (set) => ({
       mocks: [],
       requestLogs: [],
+      globalEnabled: true,
       addMock: (mock) => set((state) => ({ mocks: [...state.mocks, mock] })),
       updateMock: (id, updatedMock) =>
         set((state) => ({
@@ -51,6 +55,8 @@ export const useMockStore = create<MockState>()(
         set((state) => ({
           mocks: state.mocks.map((mock) => (mock.id === id ? { ...mock, enabled: !mock.enabled } : mock)),
         })),
+      toggleGlobal: () => set((state) => ({ globalEnabled: !state.globalEnabled })),
+      setGlobalEnabled: (enabled) => set({ globalEnabled: enabled }),
       addRequestLog: (log) =>
         set((state) => ({
           requestLogs: [log, ...state.requestLogs].slice(0, 100),

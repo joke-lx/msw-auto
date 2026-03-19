@@ -131,7 +131,7 @@ async function copyWorkerScript(destination, cwd) {
 function printSuccessMessage(paths) {
   console.log(`
 ${import_picocolors2.default.green("Worker script successfully copied!")}
-${paths.map((path6) => import_picocolors2.default.gray(`  - ${path6}
+${paths.map((path8) => import_picocolors2.default.gray(`  - ${path8}
 `))}
 Continue by describing the network in your application:
 
@@ -141,7 +141,7 @@ ${import_picocolors2.default.red(import_picocolors2.default.bold("https://mswjs.
 }
 function printFailureMessage(pathsWithErrors) {
   console.error(`${import_picocolors2.default.red("Copying the worker script failed at following paths:")}
-${pathsWithErrors.map(([path6, error2]) => import_picocolors2.default.gray(`  - ${path6}`) + `
+${pathsWithErrors.map(([path8, error2]) => import_picocolors2.default.gray(`  - ${path8}`) + `
   ${error2}`).join("\n\n")}
   `);
 }
@@ -386,14 +386,72 @@ async function server(argv) {
 }
 
 // cli/commands/web.js
+var import_child_process2 = require("child_process");
+var import_path2 = __toESM(require("path"), 1);
+var import_url2 = require("url");
+var import_meta3 = {};
+var __dirname2 = import_path2.default.dirname((0, import_url2.fileURLToPath)(import_meta3.url));
 async function web(argv) {
   const port = argv.port || 3e3;
   try {
     success(`Starting Web UI on port ${port}...`);
+    const projectRoot = import_path2.default.resolve(__dirname2, "../..");
+    const webDir = import_path2.default.resolve(projectRoot, "web");
     success(`Open http://localhost:${port} in your browser`);
     console.log("\nPress Ctrl+C to stop the server\n");
+    const serverProcess = (0, import_child_process2.spawn)("npx", ["vite", "--port", port.toString()], {
+      cwd: webDir,
+      stdio: "inherit",
+      shell: true,
+      env: {
+        ...process.env
+      }
+    });
+    serverProcess.on("error", (err) => {
+      error(`Failed to start Web UI: ${err.message}`);
+      process.exit(1);
+    });
+    serverProcess.on("exit", (code) => {
+      if (code !== 0) {
+        error(`Web UI exited with code ${code}`);
+        process.exit(code || 1);
+      }
+    });
   } catch (err) {
     error(`Failed to start Web UI: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+// cli/commands/mcp.js
+var import_child_process3 = require("child_process");
+var import_path3 = __toESM(require("path"), 1);
+var import_url3 = require("url");
+var import_meta4 = {};
+var __dirname3 = import_path3.default.dirname((0, import_url3.fileURLToPath)(import_meta4.url));
+async function mcp(argv) {
+  try {
+    success("Starting MCP Server...");
+    const projectRoot = import_path3.default.resolve(__dirname3, "../..");
+    const serverProcess = (0, import_child_process3.spawn)("npx", ["tsx", "src/mcp/server.ts"], {
+      cwd: projectRoot,
+      stdio: "inherit",
+      env: {
+        ...process.env
+      }
+    });
+    serverProcess.on("error", (err) => {
+      error(`Failed to start MCP Server: ${err.message}`);
+      process.exit(1);
+    });
+    serverProcess.on("exit", (code) => {
+      if (code !== 0) {
+        error(`MCP Server exited with code ${code}`);
+        process.exit(code || 1);
+      }
+    });
+  } catch (err) {
+    error(`Failed to start MCP Server: ${err.message}`);
     process.exit(1);
   }
 }
@@ -461,16 +519,16 @@ var import_select = __toESM(require("@inquirer/select"), 1);
 // cli/menu.js
 var import_chalk = __toESM(require("chalk"), 1);
 var import_ora = __toESM(require("ora"), 1);
-var import_child_process2 = require("child_process");
+var import_child_process4 = require("child_process");
 var import_util = require("util");
-var import_path2 = __toESM(require("path"), 1);
-var import_url2 = require("url");
-var import_meta3 = {};
-var execAsync = (0, import_util.promisify)(import_child_process2.exec);
-var __dirname2 = import_path2.default.dirname((0, import_url2.fileURLToPath)(import_meta3.url));
+var import_path4 = __toESM(require("path"), 1);
+var import_url4 = require("url");
+var import_meta5 = {};
+var execAsync = (0, import_util.promisify)(import_child_process4.exec);
+var __dirname4 = import_path4.default.dirname((0, import_url4.fileURLToPath)(import_meta5.url));
 function getCLIPath() {
-  const devCLIPath = import_path2.default.resolve(__dirname2, "../src/server/index.ts");
-  const prodCLIPath = import_path2.default.resolve(__dirname2, "../cli/index.js");
+  const devCLIPath = import_path4.default.resolve(__dirname4, "../src/server/index.ts");
+  const prodCLIPath = import_path4.default.resolve(__dirname4, "../cli/index.js");
   try {
     const fs3 = require("fs");
     if (fs3.existsSync(prodCLIPath)) {
@@ -482,7 +540,7 @@ function getCLIPath() {
 }
 async function runCLI(args) {
   const cliPath = getCLIPath();
-  const cliDir = import_path2.default.dirname(cliPath);
+  const cliDir = import_path4.default.dirname(cliPath);
   await execAsync(`node "${cliPath}" ${args}`, { cwd: cliDir });
 }
 async function menu() {
@@ -580,7 +638,13 @@ async function startWebMenu() {
   });
   const spinner = (0, import_ora.default)(t("menu.starting")).start();
   try {
-    spinner.succeed("Web UI feature coming soon");
+    const serverPath = getServerPath();
+    const webDir = import_path4.default.resolve(import_path4.default.dirname(serverPath), "web");
+    await execAsync(`npx vite --port ${port}`, {
+      cwd: webDir,
+      stdio: "inherit"
+    });
+    spinner.succeed(t("menu.success"));
   } catch (error2) {
     spinner.fail(t("menu.failed"));
     console.error(error2.message);
@@ -666,7 +730,7 @@ ${getCurrentLang() === "zh" ? "\u793A\u4F8B\uFF1A" : "Examples:"}
 
 // cli/config.js
 var fs2 = __toESM(require("fs"), 1);
-var path5 = __toESM(require("path"), 1);
+var path7 = __toESM(require("path"), 1);
 var os = __toESM(require("os"), 1);
 var DEFAULT_CONFIG = {
   llm: {
@@ -687,7 +751,7 @@ var ConfigManager = class {
   constructor() {
     const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
     const baseDir = isCI ? process.env.TMPDIR || "/tmp" : os.homedir();
-    this.configPath = path5.join(baseDir, ".msw-auto", "config.json");
+    this.configPath = path7.join(baseDir, ".msw-auto", "config.json");
     this.config = this.load();
   }
   /**
@@ -708,7 +772,7 @@ var ConfigManager = class {
    */
   save() {
     try {
-      const dir = path5.dirname(this.configPath);
+      const dir = path7.dirname(this.configPath);
       if (!fs2.existsSync(dir)) {
         fs2.mkdirSync(dir, { recursive: true });
       }
@@ -981,6 +1045,13 @@ if (isInteractive) {
   async (argv) => {
     await modelCmd(argv.model);
   }
+).command(
+  "mcp",
+  "Start MCP server for AI integration",
+  (yargs2) => {
+    yargs2.example("$0 mcp");
+  },
+  mcp
 ).command(
   "help",
   "Show help information",

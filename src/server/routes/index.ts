@@ -1,4 +1,6 @@
 import express from 'express'
+import crypto from 'crypto'
+import http from 'http'
 import type { MockManager } from '../mock/manager.js'
 import type { Database } from '../storage/database.js'
 import type { ClaudeClient } from '../llm/claude-client.js'
@@ -26,7 +28,28 @@ export function setupRoutes(
 
   // Health check
   app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() })
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      globalEnabled: mockManager.isGlobalEnabled(),
+    })
+  })
+
+  // ============ Global Toggle API ============
+  app.get('/api/global-toggle', (req, res) => {
+    res.json({ enabled: mockManager.isGlobalEnabled() })
+  })
+
+  app.post('/api/global-toggle', (req, res) => {
+    const { enabled } = req.body
+    if (typeof enabled === 'boolean') {
+      mockManager.setGlobalEnabled(enabled)
+      res.json({ enabled: mockManager.isGlobalEnabled() })
+    } else {
+      // Toggle if no enabled param
+      const newState = mockManager.toggleGlobal()
+      res.json({ enabled: newState })
+    }
   })
 
   // ============ Mock CRUD API ============
@@ -391,6 +414,7 @@ export function setupRoutes(
         activeMocks: enabledMocks,
         disabledMocks: mocks.length - enabledMocks,
         aiEnabled: claudeClient.isEnabled(),
+        globalEnabled: mockManager.isGlobalEnabled(),
       })
     } catch (error: any) {
       res.status(500).json({ error: error.message })
@@ -427,7 +451,7 @@ export function setupRoutes(
       // Log the request
       const duration = Date.now() - startTime
       await database.saveRequestLog({
-        id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `req_${crypto.randomUUID()}`,
         method: req.method,
         path: req.path,
         query: req.query,
@@ -453,15 +477,50 @@ export function setupRoutes(
       console.log(
         `${pc.gray(new Date().toISOString())} ${pc.blue(req.method)} ${pc.yellow(req.path)} ${pc.cyan('Proxy')}`
       )
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'No mock found and proxy not fully configured',
+
+      // Proxy the request to backend
+      const targetUrl = new URL(req.path, config.backendUrl)
+
+      const proxyReq = http.request({
+        hostname: targetUrl.hostname,
+        port: targetUrl.port || 80,
+        path: targetUrl.pathname + targetUrl.search,
+        method: req.method,
+        headers: {
+          ...req.headers,
+          host: targetUrl.host,
+        },
+      }, (proxyRes) => {
+        // Forward the response status and headers
+        res.status(proxyRes.statusCode || 200)
+        proxyRes.headers && Object.entries(proxyRes.headers).forEach(([key, value]) => {
+          if (value) res.setHeader(key, value)
+        })
+
+        // Stream the response body
+        proxyRes.pipe(res)
       })
+
+      proxyReq.on('error', (err) => {
+        console.error(pc.red(`[Proxy] Error: ${err.message}`))
+        res.status(502).json({
+          error: 'Bad Gateway',
+          message: `Failed to proxy request: ${err.message}`,
+        })
+      })
+
+      // Forward the request body if present
+      if (req.body && Object.keys(req.body).length > 0) {
+        proxyReq.write(JSON.stringify(req.body))
+      }
+
+      proxyReq.end()
+      return
     }
 
     // Log the request as not mocked
     await database.saveRequestLog({
-      id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `req_${crypto.randomUUID()}`,
       method: req.method,
       path: req.path,
       query: req.query,

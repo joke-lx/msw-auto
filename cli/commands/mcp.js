@@ -5,42 +5,35 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export async function web(argv) {
-  const port = argv.port || 3000
-
+export async function mcp(argv) {
   try {
-    success(`Starting Web UI on port ${port}...`)
+    success('Starting MCP Server...')
 
     // Find the project root
     const projectRoot = path.resolve(__dirname, '../..')
-    const webDir = path.resolve(projectRoot, 'web')
 
-    success(`Open http://localhost:${port} in your browser`)
-    console.log('\nPress Ctrl+C to stop the server\n')
-
-    // Start the Web UI using Vite
-    const serverProcess = spawn('npx', ['vite', '--port', port.toString()], {
-      cwd: webDir,
+    // Start the MCP server
+    const serverProcess = spawn('npx', ['tsx', 'src/mcp/server.ts'], {
+      cwd: projectRoot,
       stdio: 'inherit',
-      shell: true,
       env: {
         ...process.env,
       },
     })
 
     serverProcess.on('error', (err) => {
-      error(`Failed to start Web UI: ${err.message}`)
+      error(`Failed to start MCP Server: ${err.message}`)
       process.exit(1)
     })
 
     serverProcess.on('exit', (code) => {
       if (code !== 0) {
-        error(`Web UI exited with code ${code}`)
+        error(`MCP Server exited with code ${code}`)
         process.exit(code || 1)
       }
     })
   } catch (err) {
-    error(`Failed to start Web UI: ${err.message}`)
+    error(`Failed to start MCP Server: ${err.message}`)
     process.exit(1)
   }
 }

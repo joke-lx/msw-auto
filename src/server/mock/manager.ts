@@ -1,5 +1,5 @@
 import type { Database } from '../storage/database.js'
-import { v4 as uuidv4 } from 'crypto'
+import crypto from 'crypto'
 
 export interface Mock {
   id: string
@@ -35,6 +35,7 @@ export interface CreateMockDto {
 
 export class MockManager {
   private mocks: Map<string, Mock> = new Map()
+  private globalEnabled: boolean = true  // 全局开关，默认开启
 
   constructor(private database: Database) {
     this.loadMocks()
@@ -53,7 +54,7 @@ export class MockManager {
 
   async create(dto: CreateMockDto): Promise<Mock> {
     const mock: Mock = {
-      id: `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `mock_${crypto.randomUUID()}`,
       name: dto.name,
       method: dto.method.toUpperCase(),
       path: dto.path,
@@ -133,7 +134,26 @@ export class MockManager {
     return Array.from(this.mocks.values()).filter((mock) => mock.enabled)
   }
 
+  // 全局开关相关方法
+  isGlobalEnabled(): boolean {
+    return this.globalEnabled
+  }
+
+  setGlobalEnabled(enabled: boolean): void {
+    this.globalEnabled = enabled
+  }
+
+  toggleGlobal(): boolean {
+    this.globalEnabled = !this.globalEnabled
+    return this.globalEnabled
+  }
+
   findMatchingMock(method: string, path: string): Mock | null {
+    // 全局开关关闭时，跳过所有 Mock
+    if (!this.globalEnabled) {
+      return null
+    }
+
     const enabledMocks = Array.from(this.mocks.values()).filter((mock) => mock.enabled)
 
     for (const mock of enabledMocks) {

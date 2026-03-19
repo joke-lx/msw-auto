@@ -22,13 +22,17 @@
 ## 特性
 
 - **强大的 Mock 能力** - 基于 MSW，支持 REST、GraphQL 和 WebSocket
+- **全局开关控制** - 一键开启/关闭所有 Mock 拦截
 - **Web UI 管理** - 直观的图形界面管理 Mock 配置
 - **AI 生成** - 使用 LLM 自动生成 Mock 数据
+- **前端代码分析** - 自动分析前端项目中的 API 调用 (axios/fetch/XHR)
 - **MCP 工具服务** - 提供本地文件操作和 AI 集成工具
 - **多 LLM 支持** - 支持 Anthropic、OpenAI 等
 - **导入支持** - 支持从 Postman 和 Swagger 导入 API 定义
 - **主题切换** - 支持浅色/深色主题，一键切换
 - **国际化** - 支持中英文界面
+- **请求日志** - 实时记录和查看所有请求
+- **版本管理** - 支持 Mock 版本历史和回滚
 
 ## 快速开始
 
@@ -150,10 +154,62 @@ MCP Server 提供以下工具，任何支持 MCP 协议的 LLM 都可以调用�
 
 ## Web UI 功能
 
-- **仪表盘** - 查看请求统计和最近请求
+- **仪表盘** - 查看请求统计、最近请求、全局开关控制
 - **API 浏览器** - 浏览和搜索所有 Mock API
 - **Mock 管理** - 创建、编辑、删除和启用/禁用 Mock
+- **文档生成** - AI 生成 API 文档，一键复制
 - **设置** - 主题、语言和 API 配置
+
+## API 接口
+
+### 全局控制
+
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/global-toggle` | GET | 获取全局开关状态 |
+| `/api/global-toggle` | POST | 设置全局开关 (enabled: boolean) |
+| `/api/stats` | GET | 获取统计信息 |
+
+### Mock 管理
+
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/mocks` | GET | 获取所有 Mock |
+| `/api/mocks` | POST | 创建 Mock |
+| `/api/mocks/:id` | GET | 获取单个 Mock |
+| `/api/mocks/:id` | PUT | 更新 Mock |
+| `/api/mocks/:id` | DELETE | 删除 Mock |
+| `/api/mocks/:id/toggle` | POST | 切换单个 Mock 状态 |
+| `/api/mocks/:id/duplicate` | POST | 复制 Mock |
+
+### 版本管理
+
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/mocks/:id/versions` | GET | 获取版本历史 |
+| `/api/mocks/:id/versions` | POST | 创建版本快照 |
+| `/api/mocks/:id/versions/:version/rollback` | POST | 回滚到指定版本 |
+| `/api/mocks/:id/versions/compare` | GET | 对比两个版本 |
+
+### AI 功能
+
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/ai/generate` | POST | AI 生成 Mock |
+| `/api/ai/improve/:id` | POST | AI 改进 Mock |
+| `/api/ai/docs/:id` | POST | AI 生成文档 |
+| `/api/ai/chat` | POST | AI 对话 |
+| `/api/ai/status` | GET | AI 服务状态 |
+
+### 导入导出
+
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/import/openapi` | POST | 导入 OpenAPI |
+| `/api/import/postman` | POST | 导入 Postman |
+| `/api/export/openapi` | GET | 导出 OpenAPI |
+| `/api/export/postman` | GET | 导出 Postman |
+| `/api/export/json` | GET | 导出 JSON |
 
 ## 架构
 

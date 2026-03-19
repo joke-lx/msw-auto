@@ -4,6 +4,7 @@ import { init } from './init.js'
 import { banner } from './banner.js'
 import { server } from './commands/server.js'
 import { web } from './commands/web.js'
+import { mcp } from './commands/mcp.js'
 import { generate } from './commands/generate.js'
 import { importCmd } from './commands/import.js'
 import { menu, showHelp } from './menu.js'
@@ -196,6 +197,15 @@ yargs(process.argv.slice(2))
     async (argv) => {
       await modelCmd(argv.model)
     },
+  )
+  .command(
+    'mcp',
+    'Start MCP server for AI integration',
+    (yargs) => {
+      yargs
+        .example('$0 mcp')
+    },
+    mcp,
   )
   .command(
     'help',

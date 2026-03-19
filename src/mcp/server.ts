@@ -13,11 +13,19 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { spawn, ChildProcess } from 'child_process';
 import { analyzeProject } from './analyzer.js';
 import { llmService } from './llm-service.js';
 import { ProjectManager } from './project-manager.js';
 
 const projectManager = new ProjectManager();
+
+// Store running mock servers
+const runningServers: Map<string, ChildProcess> = new Map();
+
+// Get project root directory
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
  * MCP Server instance
@@ -430,6 +438,86 @@ class MSWAutoMCPServer {
   private handleStartMockServer(args: any) {
     const { projectPath, port } = args;
     const mockPort = port || 3001;
+    const serverKey = projectPath || 'default';
+
+    // Check if server is already running
+    if (runningServers.has(serverKey)) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              message: `Mock server already running for ${serverKey}`,
+              port: mockPort,
+              url: `http://localhost:${mockPort}`,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    // Find the server entry point
+    const serverPath = path.resolve(projectRoot, 'src/server/index.ts');
+
+    if (!fs.existsSync(serverPath)) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              message: `Server not found at ${serverPath}`,
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Start the mock server
+    const serverProcess = spawn('npx', ['tsx', serverPath, '--port', mockPort.toString()], {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        PORT: mockPort.toString(),
+      },
+    });
+
+    // Store the process
+    runningServers.set(serverKey, serverProcess);
+
+    // Handle process output
+    serverProcess.stdout?.on('data', (data) => {
+      console.error(`[Mock Server] ${data}`);
+    });
+
+    serverProcess.stderr?.on('data', (data) => {
+      console.error(`[Mock Server Error] ${data}`);
+    });
+
+    serverProcess.on('exit', (code) => {
+      runningServers.delete(serverKey);
+      console.error(`[Mock Server] Exited with code ${code}`);
+    });
+
+    // Give it a moment to start
+    setTimeout(() => {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: `Mock server started`,
+              port: mockPort,
+              url: `http://localhost:${mockPort}`,
+            }, null, 2),
+          },
+        ],
+      };
+    }, 1000);
 
     return {
       content: [
@@ -437,7 +525,7 @@ class MSWAutoMCPServer {
           type: 'text',
           text: JSON.stringify({
             success: true,
-            message: `Mock server started`,
+            message: `Mock server starting...`,
             port: mockPort,
             url: `http://localhost:${mockPort}`,
           }, null, 2),

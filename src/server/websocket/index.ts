@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws'
+import crypto from 'crypto'
 import type { MockManager } from '../mock/manager.js'
 import type { Database } from '../storage/database.js'
 import pc from 'picocolors'
@@ -17,7 +18,7 @@ export function setupWebSocket(
   const clients: Map<string, WSClient> = new Map()
 
   wss.on('connection', (ws: WebSocket) => {
-    const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const clientId = `client_${crypto.randomUUID()}`
 
     const client: WSClient = {
       id: clientId,
