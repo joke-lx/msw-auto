@@ -13,6 +13,15 @@ export interface Endpoint {
   file?: string;
   handler?: string;
   framework?: string;
+  // OpenAPI 扩展字段
+  operationId?: string;
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  parameters?: any;
+  requestBody?: any;
+  responses?: any;
+  successResponse?: any;
 }
 
 export interface ProjectAnalysis {
@@ -31,34 +40,58 @@ export async function analyzeProject(
   const endpoints: Endpoint[] = [];
   const frameworks: string[] = [];
 
-  // Check for common API patterns
-  const patterns = [
-    // Express routes
-    { pattern: /router\.(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'express' },
-    // Fastify routes
-    { pattern: /fastify\.(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'fastify' },
-    // Koa routes
-    { pattern: /router\.(get|post|put|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'koa' },
-    // Next.js API routes
-    { pattern: /export\s+(default\s+)?(async\s+)?function\s+\w+\s*\(\s*req|handler\s*=/g, framework: 'nextjs', path: 'pages/api' },
-    // NestJS controllers
-    { pattern: /@\((['"`])[^'"`]+['"`]\)\s*\s*@(Get|Post|Put|Patch|Delete|Delete)\s*\(['"`]([^'"`]+)['"`]/g, framework: 'nestjs' },
-    // Spring Boot
-    { pattern: /@(GetMapping|PostMapping|PutMapping|DeleteMapping|RequestMapping)\s*\(\s*value\s*=\s*['"`]([^'"`]+)['"`]/g, framework: 'spring' },
-    // Flask
-    { pattern: /@(app\.)?(get|post|put|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'flask' },
-    // Django
-    { pattern: /path\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'django' },
-  ];
+  // 优先使用 AST 解析
+  try {
+    const { AdapterManager } = await import('./ast/index.js');
+    const manager = new AdapterManager();
+    const astRoutes = await manager.analyzeProject(projectPath);
 
-  // Analyze directory recursively
-  await analyzeDirectory(projectPath, patterns, endpoints, frameworks);
+    if (astRoutes.length > 0) {
+      endpoints.push(...astRoutes.map(route => ({
+        method: route.method,
+        path: route.path,
+        file: route.file,
+        handler: route.handler,
+        framework: route.framework,
+      })));
+      frameworks.push(astRoutes[0].framework);
+    }
+  } catch (error) {
+    console.warn('AST analysis failed, falling back to regex:', error);
+  }
+
+  // 如果 AST 解析失败，回退到正则表达式
+  if (endpoints.length === 0) {
+    const patterns = [
+      // Express routes
+      { pattern: /router\.(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'express' },
+      // Fastify routes
+      { pattern: /fastify\.(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'fastify' },
+      // Koa routes
+      { pattern: /router\.(get|post|put|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'koa' },
+      // Next.js API routes
+      { pattern: /export\s+(default\s+)?(async\s+)?function\s+\w+\s*\(\s*req|handler\s*=/g, framework: 'nextjs', path: 'pages/api' },
+      // NestJS controllers
+      { pattern: /@\((['"`])[^'"`]+['"`]\)\s*\s*@(Get|Post|Put|Patch|Delete|Delete)\s*\(['"`]([^'"`]+)['"`]/g, framework: 'nestjs' },
+      // Spring Boot
+      { pattern: /@(GetMapping|PostMapping|PutMapping|DeleteMapping|RequestMapping)\s*\(\s*value\s*=\s*['"`]([^'"`]+)['"`]/g, framework: 'spring' },
+      // Flask
+      { pattern: /@(app\.)?(get|post|put|delete)\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'flask' },
+      // Django
+      { pattern: /path\s*\(\s*['"`]([^'"`]+)['"`]/g, framework: 'django' },
+    ];
+
+    await analyzeDirectory(projectPath, patterns, endpoints, frameworks);
+  }
 
   // If proxy URL is provided, try to get OpenAPI/Swagger spec
   if (proxyUrl) {
     try {
       const openApiEndpoints = await fetchOpenApiEndpoints(proxyUrl);
-      endpoints.push(...openApiEndpoints);
+      if (openApiEndpoints.length > 0) {
+        endpoints.push(...openApiEndpoints);
+        frameworks.push('openapi');
+      }
     } catch {
       // Ignore errors from fetching OpenAPI spec
     }
@@ -183,7 +216,7 @@ function analyzeFile(
 }
 
 async function fetchOpenApiEndpoints(proxyUrl: string): Promise<Endpoint[]> {
-  const endpoints: Endpoint[] = [];
+  const { OpenAPIParser } = await import('./openapi/index.js');
 
   // Try common OpenAPI/Swagger endpoints
   const openApiPaths = [
@@ -193,39 +226,37 @@ async function fetchOpenApiEndpoints(proxyUrl: string): Promise<Endpoint[]> {
     '/openapi.json',
     '/api/openapi.json',
     '/api/v1/api-docs',
+    '/v2/api-docs',
+    '/v3/api-docs',
   ];
 
   for (const openApiPath of openApiPaths) {
     try {
-      const response = await fetch(`${proxyUrl}${openApiPath}`, {
-        signal: AbortSignal.timeout(5000),
-      });
+      const result = await OpenAPIParser.parseFromUrl(`${proxyUrl}${openApiPath}`);
 
-      if (response.ok) {
-        const spec = await response.json();
-
-        // Parse OpenAPI spec
-        if (spec.paths) {
-          for (const [path, methods] of Object.entries(spec.paths)) {
-            for (const [method, details] of Object.entries(methods as Record<string, any>)) {
-              if (['get', 'post', 'put', 'patch', 'delete', 'options', 'head'].includes(method)) {
-                endpoints.push({
-                  method: method.toUpperCase(),
-                  path,
-                  framework: 'openapi',
-                });
-              }
-            }
-          }
-        }
-        break;
+      if (result.success && result.endpoints.length > 0) {
+        // 转换为旧的 Endpoint 格式
+        return result.endpoints.map(ep => ({
+          method: ep.method,
+          path: ep.path,
+          framework: 'openapi',
+          // 保留额外信息供后续使用
+          operationId: ep.operationId,
+          summary: ep.summary,
+          description: ep.description,
+          tags: ep.tags,
+          parameters: ep.parameters,
+          requestBody: ep.requestBody,
+          responses: ep.responses,
+          successResponse: ep.successResponse,
+        }));
       }
     } catch {
       // Continue to next path
     }
   }
 
-  return endpoints;
+  return [];
 }
 
 function deduplicateEndpoints(endpoints: Endpoint[]): Endpoint[] {
