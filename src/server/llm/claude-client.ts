@@ -225,3 +225,30 @@ export function getClaudeClient(config?: ClaudeConfig): ClaudeClient {
   }
   return claudeClient
 }
+
+// Hot reload Claude client with new config
+export async function reloadClaudeClient(config: any = {}): Promise<boolean> {
+  try {
+    // Create new client with updated config
+    const newClient = new ClaudeClient({
+      apiKey: config.apiKey,
+      baseURL: config.baseUrl,
+      model: config.model,
+    })
+
+    // Initialize new client
+    const initialized = await newClient.initialize()
+
+    if (initialized) {
+      // Replace singleton
+      claudeClient = newClient
+      console.log(pc.green('[Claude] Client reloaded successfully'))
+      return true
+    }
+
+    return false
+  } catch (error: any) {
+    console.error(pc.red('[Claude] Failed to reload client:'), error.message)
+    return false
+  }
+}

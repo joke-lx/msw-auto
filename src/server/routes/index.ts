@@ -7,6 +7,27 @@ import type { ClaudeClient } from '../llm/claude-client.js'
 import { VersionManager } from '../mock/version-manager.js'
 import { ImportExporter } from '../import-export/importer.js'
 import pc from 'picocolors'
+import { WebSocketServer } from 'ws'
+
+// Global reference to WebSocket server for broadcasting
+let globalWss: WebSocketServer | null = null
+
+export function setWebSocketServer(wss: WebSocketServer) {
+  globalWss = wss
+}
+
+function broadcastRequest(method: string, path: string, status: number, duration: number) {
+  if (!globalWss) return
+  const message = JSON.stringify({
+    type: 'REQUEST',
+    data: { method, path, status, duration, timestamp: new Date().toISOString() }
+  })
+  globalWss.clients.forEach((client: any) => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      client.send(message)
+    }
+  })
+}
 
 export interface ServerConfig {
   port: number
@@ -222,6 +243,100 @@ export function setupRoutes(
       enabled: claudeClient.isEnabled(),
       provider: 'Anthropic Claude',
     })
+  })
+
+  // Get LLM configuration
+  app.get('/api/llm/config', async (req, res) => {
+    try {
+      const configPath = './data/config.json'
+      let config: any = {}
+
+      try {
+        const fs = await import('fs')
+        if (fs.existsSync(configPath)) {
+          config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+        }
+      } catch (e) {
+        // Ignore file read errors
+      }
+
+      // Return safe config (hide full API key)
+      res.json({
+        provider: config.provider || 'anthropic',
+        apiKey: config.apiKey ? '***' : '',
+        baseUrl: config.baseUrl || '',
+        model: config.model || '',
+        hasApiKey: !!config.apiKey,
+        enabled: claudeClient.isEnabled(),
+      })
+    } catch (error: any) {
+      res.status(500).json({ error: error.message })
+    }
+  })
+
+  // Save LLM configuration
+  app.post('/api/llm/config', async (req, res) => {
+    try {
+      const { provider, apiKey, baseUrl, model } = req.body
+
+      if (!provider || (provider !== 'anthropic' && provider !== 'openai' && provider !== 'custom')) {
+        return res.status(400).json({ error: 'Invalid provider. Must be anthropic, openai, or custom' })
+      }
+
+      // Read existing config
+      const fs = await import('fs')
+      const configPath = './data/config.json'
+      let config: any = {}
+
+      try {
+        if (fs.existsSync(configPath)) {
+          config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+        }
+      } catch (e) {
+        // Ignore
+      }
+
+      // Update config
+      config.provider = provider
+      if (apiKey && apiKey !== '***') {
+        config.apiKey = apiKey
+      }
+      if (baseUrl) {
+        config.baseUrl = baseUrl
+      }
+      if (model) {
+        config.model = model
+      }
+
+      // Save config
+      fs.mkdirSync('./data', { recursive: true })
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+
+      // Try to hot reload the Claude client
+      try {
+        const { reloadClaudeClient } = await import('../llm/claude-client.js')
+        const reloaded = await reloadClaudeClient(config)
+        if (reloaded) {
+          res.json({
+            success: true,
+            message: 'Configuration saved and LLM client reloaded successfully!',
+          })
+        } else {
+          res.json({
+            success: true,
+            message: 'Configuration saved. LLM client reload failed - please restart the server.',
+          })
+        }
+      } catch (e) {
+        // If reload function doesn't exist, fall back to restart message
+        res.json({
+          success: true,
+          message: 'Configuration saved. Please restart the server to apply changes.',
+        })
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message })
+    }
   })
 
   // ============ Version Management API ============
@@ -465,6 +580,9 @@ export function setupRoutes(
         timestamp: new Date().toISOString(),
       })
 
+      // Broadcast AFTER database save
+      broadcastRequest(req.method, req.path, mock.status, duration)
+
       console.log(
         `${pc.gray(new Date().toISOString())} ${pc.blue(req.method)} ${pc.green(req.path)} ${pc.green('Mock')}`
       )
@@ -533,6 +651,9 @@ export function setupRoutes(
       mock_id: null,
       timestamp: new Date().toISOString(),
     })
+
+    // Broadcast AFTER database save
+    broadcastRequest(req.method, req.path, 404, Date.now() - startTime)
 
     res.status(404).json({
       error: 'Not Found',

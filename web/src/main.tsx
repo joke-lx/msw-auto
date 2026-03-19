@@ -1,7 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { RouterProvider } from 'react-router-dom'
 import { ConfigProvider, theme as antdTheme } from 'antd'
-import App from './App'
+import router from './router'
 import './i18n'
 import './styles/global.css'
 import { useAppStore } from './stores/appStore'
@@ -29,7 +30,7 @@ const AntDesignThemeProvider: React.FC<{ children: React.ReactNode }> = ({ child
 const Root: React.FC = () => {
   return (
     <AntDesignThemeProvider>
-      <App />
+      <RouterProvider router={router} />
     </AntDesignThemeProvider>
   )
 }

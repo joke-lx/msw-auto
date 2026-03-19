@@ -1,29 +1,87 @@
-import { Card, Row, Col, Statistic, Table, Tag, Switch, theme, Button, message } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, Table, Tag, Switch, theme, Button, message, Badge } from 'antd'
+import { PlusOutlined, ThunderboltOutlined, WifiOutlined, DisconnectOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useMockStore } from '@/stores/mockStore'
 import { useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation()
-  const { mocks, requestLogs, globalEnabled, setGlobalEnabled } = useMockStore()
+  const { mocks, globalEnabled, setGlobalEnabled } = useMockStore()
   const { token } = theme.useToken()
   const navigate = useNavigate()
+
+  // Local state for request logs (loaded from server)
+  const [requestLogs, setRequestLogs] = useState<any[]>([])
+  const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
 
   const activeMocks = mocks.filter((mock) => mock.enabled).length
   const totalRequests = requestLogs.length
 
-  // 同步全局开关状态
+  // Load request logs from server
+  const fetchRequestLogs = async () => {
+    try {
+      const res = await fetch('/api/requests?limit=50')
+      if (res.ok) {
+        const logs = await res.json()
+        setRequestLogs(logs)
+      }
+    } catch (error) {
+      console.error('Failed to load request logs:', error)
+    }
+  }
+
+  // Set up WebSocket for real-time updates
   useEffect(() => {
-    fetch('/api/global-toggle')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.enabled !== globalEnabled) {
-          setGlobalEnabled(data.enabled)
+    let reconnectTimer: NodeJS.Timeout
+
+    const connectWebSocket = () => {
+      const ws = new WebSocket('ws://localhost:3001/ws')
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        setWsConnected(true)
+        console.log('[WebSocket] Connected')
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'REQUEST') {
+            // Add new request log to the list
+            setRequestLogs((prev) => [data.data, ...prev].slice(0, 50))
+          }
+        } catch (e) {
+          // Ignore non-JSON messages
         }
-      })
-      .catch(console.error)
+      }
+
+      ws.onerror = () => {
+        console.log('[WebSocket] Error')
+        setWsConnected(false)
+      }
+
+      ws.onclose = () => {
+        console.log('[WebSocket] Disconnected')
+        setWsConnected(false)
+        // Reconnect after 3 seconds
+        reconnectTimer = setTimeout(connectWebSocket, 3000)
+      }
+    }
+
+    // Initial load
+    fetchRequestLogs()
+
+    // Start WebSocket connection
+    connectWebSocket()
+
+    return () => {
+      clearTimeout(reconnectTimer)
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+    }
   }, [])
 
   const handleGlobalToggle = async (checked: boolean) => {
@@ -133,22 +191,44 @@ const Dashboard: React.FC = () => {
     {
       title: 'Action',
       key: 'action',
-      width: 120,
-      render: (_: any, record: any) => (
-        <Button
-          type="link"
-          icon={<PlusOutlined />}
-          onClick={() => handleCreateMock(record)}
-        >
-          Create Mock
-        </Button>
-      ),
+      width: 150,
+      render: (_: any, record: any) => {
+        // Show "Create Mock" button only for 404 responses
+        if (record.status === 404) {
+          return (
+            <Button
+              type="primary"
+              size="small"
+              icon={<ThunderboltOutlined />}
+              onClick={() => handleCreateMock(record)}
+            >
+              AI 生成
+            </Button>
+          )
+        }
+        // For successful requests, show a simpler button
+        return (
+          <Button
+            type="default"
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={() => handleCreateMock(record)}
+          >
+            Mock
+          </Button>
+        )
+      },
     },
   ]
 
   return (
     <div>
-      <h1 style={{ marginBottom: 24 }}>{t('dashboard.title')}</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <h1 style={{ margin: 0 }}>{t('dashboard.title')}</h1>
+        <Badge status={wsConnected ? 'processing' : 'error'} text={wsConnected ? '实时连接中' : '连接断开'}>
+          {wsConnected ? <WifiOutlined /> : <DisconnectOutlined />}
+        </Badge>
+      </div>
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <Card>

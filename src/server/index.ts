@@ -4,7 +4,7 @@ import { createServer } from 'http'
 import { WebSocketServer } from 'ws'
 import { MockManager } from './mock/manager.js'
 import { Database } from './storage/database.js'
-import { setupRoutes } from './routes/index.js'
+import { setupRoutes, setWebSocketServer } from './routes/index.js'
 import { setupWebSocket } from './websocket/index.js'
 import { ClaudeClient, getClaudeClient } from './llm/claude-client.js'
 import pc from 'picocolors'
@@ -16,6 +16,10 @@ export interface ServerConfig {
   backendUrl?: string
   dbPath?: string
   claudeApiKey?: string
+  // LLM config
+  provider?: string
+  baseUrl?: string
+  model?: string
 }
 
 function loadConfig(): ServerConfig {
@@ -36,7 +40,10 @@ function loadConfig(): ServerConfig {
     webPort: parseInt(process.env.WEB_PORT || envConfig.webPort || '3000'),
     backendUrl: process.env.BACKEND_URL || envConfig.backendUrl,
     dbPath: process.env.DB_PATH || envConfig.dbPath || './data/mocks.db',
-    claudeApiKey: process.env.ANTHROPIC_API_KEY || envConfig.claudeApiKey,
+    claudeApiKey: process.env.ANTHROPIC_API_KEY || envConfig.apiKey || envConfig.claudeApiKey,
+    provider: envConfig.provider || 'anthropic',
+    baseUrl: envConfig.baseUrl,
+    model: envConfig.model,
   }
 }
 
@@ -63,6 +70,8 @@ export class MockServer {
     this.mockManager = new MockManager(this.database)
     this.claudeClient = getClaudeClient({
       apiKey: this.config.claudeApiKey,
+      baseURL: this.config.baseUrl,
+      model: this.config.model,
     })
 
     this.setupMiddleware()
@@ -75,7 +84,7 @@ export class MockServer {
     this.app.use(express.json({ limit: '10mb' }))
     this.app.use(express.urlencoded({ extended: true }))
 
-    // Request logging middleware
+    // Request logging middleware (no broadcast here - broadcast happens after DB save in routes)
     this.app.use((req, res, next) => {
       const start = Date.now()
       res.on('finish', () => {
@@ -83,18 +92,6 @@ export class MockServer {
         console.log(
           `${pc.gray(new Date().toISOString())} ${pc.blue(req.method)} ${req.path} ${pc.yellow(res.statusCode.toString())} ${pc.gray(duration + 'ms')}`
         )
-
-        // Broadcast to WebSocket clients
-        this.broadcast({
-          type: 'REQUEST',
-          data: {
-            method: req.method,
-            path: req.path,
-            status: res.statusCode,
-            duration,
-            timestamp: new Date().toISOString(),
-          },
-        })
       })
       next()
     })
@@ -106,6 +103,8 @@ export class MockServer {
 
   private setupWebSocket() {
     setupWebSocket(this.wss, this.mockManager, this.database)
+    // Pass WSS to routes for broadcasting
+    setWebSocketServer(this.wss)
   }
 
   private broadcast(data: any) {

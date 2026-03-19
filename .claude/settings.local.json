@@ -29,7 +29,23 @@
       "Bash(npm publish:*)",
       "Bash(gh secret set:*)",
       "Bash(where:*)",
-      "Bash(npm version patch)"
+      "Bash(npm version patch)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(timeout 10 tsx src/server/index.ts)",
+      "Bash(powershell -Command:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm install:*)",
+      "Bash(npm rebuild:*)",
+      "Bash(echo:*)",
+      "Bash(node_modules/.bin/tsx:*)",
+      "Bash(cmd.exe /c \"cd /d D:\\\\DevProjects\\\\my\\\\github\\\\msw-auto && node dist\\\\server\\\\index.js\")",
+      "Bash(python3 -m json.tool:*)",
+      "Bash(__NEW_LINE_c3a52d816c934ed8__ echo \"\")",
+      "Bash(__NEW_LINE_4155c89e6fc98610__ echo \"\")",
+      "Bash(__NEW_LINE_8277dd2160d005e0__ echo \"\")",
+      "Bash(npm whoami)"
     ]
   }
 }

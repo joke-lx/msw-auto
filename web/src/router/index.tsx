@@ -1,10 +1,10 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
-import App from './App'
-import Dashboard from './pages/Dashboard'
-import APIExplorer from './pages/APIExplorer'
-import MockEditor from './pages/MockEditor'
-import Settings from './pages/Settings'
-import Documentation from './pages/Documentation'
+import App from '../App'
+import Dashboard from '../pages/Dashboard'
+import APIExplorer from '../pages/APIExplorer'
+import MockEditor from '../pages/MockEditor'
+import Settings from '../pages/Settings'
+import Documentation from '../pages/Documentation'
 
 const router = createBrowserRouter([
   {

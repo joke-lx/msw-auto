@@ -5,6 +5,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -26,6 +29,516 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/server/llm/prompt-builder.ts
+var PromptBuilder;
+var init_prompt_builder = __esm({
+  "src/server/llm/prompt-builder.ts"() {
+    "use strict";
+    PromptBuilder = class {
+      buildMockPrompt(request) {
+        const { method, path: path2, description, context } = request;
+        let prompt = `
+Generate a realistic mock response for the following API endpoint:
+
+**HTTP Method:** ${method}
+**Path:** ${path2}
+${description ? `**Description:** ${description}` : ""}
+
+Requirements:
+1. Generate realistic mock data that matches typical API responses
+2. Include all necessary fields for a complete response
+3. Use appropriate data types (strings, numbers, booleans, arrays, objects)
+4. Provide realistic example values
+5. Include proper HTTP status code
+6. Add optional fields with null values where appropriate
+7. Include metadata fields like id, created_at, updated_at where appropriate
+
+Response format (JSON):
+\`\`\`json
+{
+  "name": "Descriptive name for this endpoint",
+  "method": "${method}",
+  "path": "${path2}",
+  "status": 200,
+  "response": {
+    // Your generated mock data here
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "delay": 0,
+  "description": "Brief description",
+  "tags": ["tag1", "tag2"]
+}
+\`\`\`
+`.trim();
+        if (context?.existingMocks && context.existingMocks.length > 0) {
+          prompt += `
+
+Existing mocks in the project:
+${JSON.stringify(context.existingMocks.slice(0, 3), null, 2)}`;
+        }
+        return prompt;
+      }
+      buildSystemPrompt(context = {}) {
+        let prompt = `
+You are an expert API mock generator with deep knowledge of:
+
+- RESTful API design principles
+- GraphQL specifications
+- HTTP protocols and status codes
+- JSON Schema and data modeling
+- Various programming languages and frameworks
+
+Your core responsibilities:
+1. Generate realistic, well-structured mock data
+2. Ensure data consistency across related endpoints
+3. Follow industry best practices for API design
+4. Handle edge cases and error scenarios appropriately
+
+Guidelines:
+- Always return valid JSON
+- Use appropriate HTTP status codes (200 for success, 201 for created, 400 for bad request, 404 for not found, 500 for server error)
+- Include proper response headers
+- Generate realistic example values
+- Maintain consistency in naming conventions
+- Handle optional fields correctly
+- Include error responses when appropriate
+- Consider pagination, filtering, and sorting for list endpoints
+
+When generating mock data:
+- Use realistic names, emails, phone numbers
+- Include appropriate timestamps (ISO 8601 format)
+- Generate realistic IDs (UUIDs or integers)
+- Include relationship fields (foreign keys)
+- Add metadata fields (created_at, updated_at)
+- Use appropriate field types matching the data
+`.trim();
+        if (context?.projectInfo) {
+          prompt += `
+
+Project Context:
+${JSON.stringify(context.projectInfo, null, 2)}`;
+        }
+        return prompt;
+      }
+      buildImprovePrompt(mock, instruction) {
+        return `
+You have the following existing mock:
+
+\`\`\`json
+${JSON.stringify(mock, null, 2)}
+\`\`\`
+
+User wants to improve it with the following instruction:
+"${instruction}"
+
+Please improve the mock according to the instruction while:
+1. Maintaining the existing structure
+2. Enhancing data quality and realism
+3. Adding any missing fields
+4. Improving edge case handling
+5. Keeping response format consistent
+
+Return the improved mock in the same JSON format:
+\`\`\`json
+{
+  "name": "...",
+  "method": "...",
+  "path": "...",
+  "status": ...,
+  "response": { ... },
+  "headers": { ... },
+  "delay": ...,
+  "description": "...",
+  "tags": [...]
+}
+\`\`\`
+`.trim();
+      }
+      buildOpenAPIPrompt(openApiSpec) {
+        return `
+Analyze the following OpenAPI/Swagger specification and generate mock data for all endpoints:
+
+\`\`\`json
+${JSON.stringify(openApiSpec, null, 2)}
+\`\`\`
+
+For each endpoint, generate:
+1. A successful response (200, 201, etc.)
+2. An error response (400, 404, 500, etc.) if applicable
+
+Requirements:
+1. Follow the schema definitions exactly
+2. Use realistic example values
+3. Handle all required fields
+4. Include optional fields with null values where appropriate
+5. Generate array responses with multiple items (3-5 items for lists)
+6. Maintain consistency across related endpoints
+
+Return the result as an array of mock objects:
+\`\`\`json
+[
+  {
+    "name": "Get Users",
+    "method": "GET",
+    "path": "/api/users",
+    "status": 200,
+    "response": { "data": [...], "total": 100 },
+    "headers": { "Content-Type": "application/json" },
+    "delay": 0,
+    "description": "Get all users",
+    "tags": ["users", "list"]
+  }
+]
+\`\`\`
+`.trim();
+      }
+      buildDocumentationPrompt(mock) {
+        return `
+Generate comprehensive API documentation in Markdown format for the following mock endpoint:
+
+\`\`\`json
+${JSON.stringify(mock, null, 2)}
+\`\`\`
+
+Please generate documentation that includes:
+1. Endpoint overview and description
+2. HTTP method and full URL
+3. Request parameters (path, query, headers, body)
+4. Response structure and status codes
+5. Field definitions with types and descriptions
+6. Example requests and responses
+7. Error codes and handling
+
+Format as clean Markdown.
+`.trim();
+      }
+      buildDocumentationSystemPrompt() {
+        return `
+You are an expert API documentation generator with deep knowledge of:
+- RESTful API documentation standards
+- Markdown formatting
+- Multiple programming languages
+- API design best practices
+
+Your task is to generate clear, comprehensive API documentation that is:
+- Well-structured with proper headings
+- Includes all necessary details for developers
+- Has clear examples
+- Uses proper Markdown syntax
+`.trim();
+      }
+      buildCodeExamplesPrompt(mock, languages) {
+        return `
+Generate code examples for calling the following API endpoint in these languages: ${languages.join(", ")}
+
+API Details:
+\`\`\`json
+${JSON.stringify(mock, null, 2)}
+\`\`\`
+
+Requirements:
+1. Generate complete, working examples for each language
+2. Include proper error handling
+3. Add comments explaining the code
+4. Use popular, well-maintained libraries
+5. Include authentication if required
+
+Return as JSON:
+\`\`\`json
+{
+  "javascript": "// code here",
+  "python": "# code here",
+  "curl": "curl command here"
+}
+\`\`\`
+`.trim();
+      }
+    };
+  }
+});
+
+// src/server/llm/response-parser.ts
+var ResponseParser;
+var init_response_parser = __esm({
+  "src/server/llm/response-parser.ts"() {
+    "use strict";
+    ResponseParser = class {
+      parseMockResponse(response) {
+        try {
+          const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
+          if (jsonMatch) {
+            return JSON.parse(jsonMatch[1]);
+          }
+          const codeMatch = response.match(/```\n([\s\S]*?)\n```/);
+          if (codeMatch) {
+            return JSON.parse(codeMatch[1]);
+          }
+          return JSON.parse(response);
+        } catch (error) {
+          const jsonMatch = response.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              return JSON.parse(jsonMatch[0]);
+            } catch {
+              throw new Error(`Failed to parse mock response: ${error.message}`);
+            }
+          }
+          throw new Error("Invalid mock response format - no valid JSON found");
+        }
+      }
+      parseMultipleMocks(response) {
+        try {
+          const data = this.parseMockResponse(response);
+          if (Array.isArray(data)) {
+            return data;
+          }
+          if (data.mocks && Array.isArray(data.mocks)) {
+            return data.mocks;
+          }
+          if (data.endpoints && Array.isArray(data.endpoints)) {
+            return data.endpoints;
+          }
+          throw new Error("Invalid multiple mocks response format");
+        } catch (error) {
+          throw new Error(`Failed to parse multiple mocks: ${error.message}`);
+        }
+      }
+      parseCodeExamples(response, languages) {
+        try {
+          const data = this.parseMockResponse(response);
+          const examples = {};
+          for (const lang of languages) {
+            if (data[lang]) {
+              examples[lang] = data[lang];
+            }
+          }
+          if (Object.keys(examples).length === 0) {
+            languages.forEach((lang) => {
+              const regex = new RegExp(`\`\`\`${lang}\\n([\\s\\S]*?)\\n\`\`\``, "i");
+              const match = response.match(regex);
+              if (match) {
+                examples[lang] = match[1];
+              }
+            });
+          }
+          return examples;
+        } catch (error) {
+          throw new Error(`Failed to parse code examples: ${error.message}`);
+        }
+      }
+      parseDocumentation(response) {
+        return response.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
+      }
+    };
+  }
+});
+
+// src/server/llm/claude-client.ts
+var claude_client_exports = {};
+__export(claude_client_exports, {
+  ClaudeClient: () => ClaudeClient,
+  getClaudeClient: () => getClaudeClient,
+  reloadClaudeClient: () => reloadClaudeClient
+});
+function getClaudeClient(config) {
+  if (!claudeClient) {
+    claudeClient = new ClaudeClient(config);
+  }
+  return claudeClient;
+}
+async function reloadClaudeClient(config = {}) {
+  try {
+    const newClient = new ClaudeClient({
+      apiKey: config.apiKey,
+      baseURL: config.baseUrl,
+      model: config.model
+    });
+    const initialized = await newClient.initialize();
+    if (initialized) {
+      claudeClient = newClient;
+      console.log(import_picocolors2.default.green("[Claude] Client reloaded successfully"));
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(import_picocolors2.default.red("[Claude] Failed to reload client:"), error.message);
+    return false;
+  }
+}
+var import_sdk, import_picocolors2, ClaudeClient, claudeClient;
+var init_claude_client = __esm({
+  "src/server/llm/claude-client.ts"() {
+    "use strict";
+    import_sdk = __toESM(require("@anthropic-ai/sdk"), 1);
+    init_prompt_builder();
+    init_response_parser();
+    import_picocolors2 = __toESM(require("picocolors"), 1);
+    ClaudeClient = class {
+      client = null;
+      promptBuilder;
+      responseParser;
+      config;
+      enabled = false;
+      constructor(config = {}) {
+        this.config = {
+          model: config.model || "claude-sonnet-4-20250514",
+          maxTokens: config.maxTokens || 4096,
+          baseURL: config.baseURL,
+          ...config
+        };
+        this.promptBuilder = new PromptBuilder();
+        this.responseParser = new ResponseParser();
+      }
+      async initialize() {
+        if (!this.config.apiKey) {
+          console.log(import_picocolors2.default.yellow("[Claude] API key not configured, AI features disabled"));
+          return false;
+        }
+        try {
+          this.client = new import_sdk.default({
+            apiKey: this.config.apiKey,
+            baseURL: this.config.baseURL
+          });
+          await this.client.messages.create({
+            model: this.config.model,
+            max_tokens: 10,
+            messages: [{ role: "user", content: "ping" }]
+          });
+          this.enabled = true;
+          console.log(import_picocolors2.default.green("[Claude] Connected successfully"));
+          return true;
+        } catch (error) {
+          console.error(import_picocolors2.default.red("[Claude] Failed to initialize:"), error.message);
+          this.enabled = false;
+          return false;
+        }
+      }
+      isEnabled() {
+        return this.enabled;
+      }
+      async generateMock(request) {
+        if (!this.enabled || !this.client) {
+          throw new Error("Claude client not initialized");
+        }
+        try {
+          const prompt = this.promptBuilder.buildMockPrompt(request);
+          const systemPrompt = this.promptBuilder.buildSystemPrompt(request.context);
+          const response = await this.client.messages.create({
+            model: this.config.model,
+            max_tokens: this.config.maxTokens,
+            system: systemPrompt,
+            messages: [{ role: "user", content: prompt }]
+          });
+          const content = response.content[0];
+          const mockData = this.responseParser.parseMockResponse(content.text);
+          console.log(import_picocolors2.default.green("[Claude] Mock generated successfully"));
+          return {
+            name: mockData.name || request.path,
+            method: mockData.method || request.method,
+            path: mockData.path || request.path,
+            status: mockData.status || 200,
+            response: mockData.response || { message: "Generated by AI" },
+            headers: mockData.headers,
+            delay: mockData.delay || 0,
+            enabled: true,
+            description: mockData.description || request.description,
+            tags: mockData.tags
+          };
+        } catch (error) {
+          console.error(import_picocolors2.default.red("[Claude] Error generating mock:"), error.message);
+          throw new Error(`Failed to generate mock: ${error.message}`);
+        }
+      }
+      async generateMultipleMocks(spec) {
+        if (!this.enabled || !this.client) {
+          throw new Error("Claude client not initialized");
+        }
+        try {
+          const prompt = this.promptBuilder.buildOpenAPIPrompt(spec);
+          const systemPrompt = this.promptBuilder.buildSystemPrompt({});
+          const response = await this.client.messages.create({
+            model: this.config.model,
+            max_tokens: this.config.maxTokens,
+            system: systemPrompt,
+            messages: [{ role: "user", content: prompt }]
+          });
+          const content = response.content[0];
+          const mocks = this.responseParser.parseMultipleMocks(content.text);
+          console.log(import_picocolors2.default.green(`[Claude] Generated ${mocks.length} mocks`));
+          return mocks;
+        } catch (error) {
+          console.error(import_picocolors2.default.red("[Claude] Error generating mocks:"), error.message);
+          throw new Error(`Failed to generate mocks: ${error.message}`);
+        }
+      }
+      async chat(messages, context = {}) {
+        if (!this.enabled || !this.client) {
+          throw new Error("Claude client not initialized");
+        }
+        try {
+          const systemPrompt = this.promptBuilder.buildSystemPrompt(context);
+          const response = await this.client.messages.create({
+            model: this.config.model,
+            max_tokens: this.config.maxTokens,
+            system: systemPrompt,
+            messages
+          });
+          const content = response.content[0];
+          return content.text;
+        } catch (error) {
+          console.error(import_picocolors2.default.red("[Claude] Error in chat:"), error.message);
+          throw new Error(`Chat failed: ${error.message}`);
+        }
+      }
+      async improveMock(mock, instruction) {
+        if (!this.enabled || !this.client) {
+          throw new Error("Claude client not initialized");
+        }
+        try {
+          const prompt = this.promptBuilder.buildImprovePrompt(mock, instruction);
+          const systemPrompt = this.promptBuilder.buildSystemPrompt({});
+          const response = await this.client.messages.create({
+            model: this.config.model,
+            max_tokens: this.config.maxTokens,
+            system: systemPrompt,
+            messages: [{ role: "user", content: prompt }]
+          });
+          const content = response.content[0];
+          const improvedData = this.responseParser.parseMockResponse(content.text);
+          console.log(import_picocolors2.default.green("[Claude] Mock improved successfully"));
+          return improvedData;
+        } catch (error) {
+          console.error(import_picocolors2.default.red("[Claude] Error improving mock:"), error.message);
+          throw new Error(`Failed to improve mock: ${error.message}`);
+        }
+      }
+      async generateDocumentation(mock) {
+        if (!this.enabled || !this.client) {
+          throw new Error("Claude client not initialized");
+        }
+        try {
+          const prompt = this.promptBuilder.buildDocumentationPrompt(mock);
+          const systemPrompt = this.promptBuilder.buildDocumentationSystemPrompt();
+          const response = await this.client.messages.create({
+            model: this.config.model,
+            max_tokens: this.config.maxTokens,
+            system: systemPrompt,
+            messages: [{ role: "user", content: prompt }]
+          });
+          const content = response.content[0];
+          return content.text;
+        } catch (error) {
+          console.error(import_picocolors2.default.red("[Claude] Error generating documentation:"), error.message);
+          throw new Error(`Failed to generate documentation: ${error.message}`);
+        }
+      }
+    };
+    claudeClient = null;
+  }
+});
 
 // src/server/index.ts
 var server_exports = {};
@@ -835,7 +1348,23 @@ var ImportExporter = class {
 };
 
 // src/server/routes/index.ts
-var import_picocolors2 = __toESM(require("picocolors"), 1);
+var import_picocolors3 = __toESM(require("picocolors"), 1);
+var globalWss = null;
+function setWebSocketServer(wss) {
+  globalWss = wss;
+}
+function broadcastRequest(method, path2, status, duration) {
+  if (!globalWss) return;
+  const message = JSON.stringify({
+    type: "REQUEST",
+    data: { method, path: path2, status, duration, timestamp: (/* @__PURE__ */ new Date()).toISOString() }
+  });
+  globalWss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+}
 function setupRoutes(app, mockManager, database, config, claudeClient2) {
   const versionManager = new VersionManager(database);
   const importer = new ImportExporter();
@@ -994,6 +1523,80 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
       enabled: claudeClient2.isEnabled(),
       provider: "Anthropic Claude"
     });
+  });
+  app.get("/api/llm/config", async (req, res) => {
+    try {
+      const configPath = "./data/config.json";
+      let config2 = {};
+      try {
+        const fs3 = await import("fs");
+        if (fs3.existsSync(configPath)) {
+          config2 = JSON.parse(fs3.readFileSync(configPath, "utf-8"));
+        }
+      } catch (e) {
+      }
+      res.json({
+        provider: config2.provider || "anthropic",
+        apiKey: config2.apiKey ? "***" : "",
+        baseUrl: config2.baseUrl || "",
+        model: config2.model || "",
+        hasApiKey: !!config2.apiKey,
+        enabled: claudeClient2.isEnabled()
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.post("/api/llm/config", async (req, res) => {
+    try {
+      const { provider, apiKey, baseUrl, model } = req.body;
+      if (!provider || provider !== "anthropic" && provider !== "openai" && provider !== "custom") {
+        return res.status(400).json({ error: "Invalid provider. Must be anthropic, openai, or custom" });
+      }
+      const fs3 = await import("fs");
+      const configPath = "./data/config.json";
+      let config2 = {};
+      try {
+        if (fs3.existsSync(configPath)) {
+          config2 = JSON.parse(fs3.readFileSync(configPath, "utf-8"));
+        }
+      } catch (e) {
+      }
+      config2.provider = provider;
+      if (apiKey && apiKey !== "***") {
+        config2.apiKey = apiKey;
+      }
+      if (baseUrl) {
+        config2.baseUrl = baseUrl;
+      }
+      if (model) {
+        config2.model = model;
+      }
+      fs3.mkdirSync("./data", { recursive: true });
+      fs3.writeFileSync(configPath, JSON.stringify(config2, null, 2));
+      try {
+        const { reloadClaudeClient: reloadClaudeClient2 } = await Promise.resolve().then(() => (init_claude_client(), claude_client_exports));
+        const reloaded = await reloadClaudeClient2(config2);
+        if (reloaded) {
+          res.json({
+            success: true,
+            message: "Configuration saved and LLM client reloaded successfully!"
+          });
+        } else {
+          res.json({
+            success: true,
+            message: "Configuration saved. LLM client reload failed - please restart the server."
+          });
+        }
+      } catch (e) {
+        res.json({
+          success: true,
+          message: "Configuration saved. Please restart the server to apply changes."
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
   app.get("/api/mocks/:id/versions", async (req, res) => {
     try {
@@ -1181,14 +1784,15 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
         mock_id: mock.id,
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       });
+      broadcastRequest(req.method, req.path, mock.status, duration);
       console.log(
-        `${import_picocolors2.default.gray((/* @__PURE__ */ new Date()).toISOString())} ${import_picocolors2.default.blue(req.method)} ${import_picocolors2.default.green(req.path)} ${import_picocolors2.default.green("Mock")}`
+        `${import_picocolors3.default.gray((/* @__PURE__ */ new Date()).toISOString())} ${import_picocolors3.default.blue(req.method)} ${import_picocolors3.default.green(req.path)} ${import_picocolors3.default.green("Mock")}`
       );
       return res.status(mock.status).json(mock.response);
     }
     if (config.backendUrl) {
       console.log(
-        `${import_picocolors2.default.gray((/* @__PURE__ */ new Date()).toISOString())} ${import_picocolors2.default.blue(req.method)} ${import_picocolors2.default.yellow(req.path)} ${import_picocolors2.default.cyan("Proxy")}`
+        `${import_picocolors3.default.gray((/* @__PURE__ */ new Date()).toISOString())} ${import_picocolors3.default.blue(req.method)} ${import_picocolors3.default.yellow(req.path)} ${import_picocolors3.default.cyan("Proxy")}`
       );
       const targetUrl = new URL(req.path, config.backendUrl);
       const proxyReq = import_http.default.request({
@@ -1208,7 +1812,7 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
         proxyRes.pipe(res);
       });
       proxyReq.on("error", (err) => {
-        console.error(import_picocolors2.default.red(`[Proxy] Error: ${err.message}`));
+        console.error(import_picocolors3.default.red(`[Proxy] Error: ${err.message}`));
         res.status(502).json({
           error: "Bad Gateway",
           message: `Failed to proxy request: ${err.message}`
@@ -1234,6 +1838,7 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
       mock_id: null,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
+    broadcastRequest(req.method, req.path, 404, Date.now() - startTime);
     res.status(404).json({
       error: "Not Found",
       message: `No mock found for ${req.method} ${req.path}`
@@ -1244,7 +1849,7 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
 // src/server/websocket/index.ts
 var import_ws = require("ws");
 var import_crypto4 = __toESM(require("crypto"), 1);
-var import_picocolors3 = __toESM(require("picocolors"), 1);
+var import_picocolors4 = __toESM(require("picocolors"), 1);
 function setupWebSocket(wss, mockManager, database) {
   const clients = /* @__PURE__ */ new Map();
   wss.on("connection", (ws) => {
@@ -1254,7 +1859,7 @@ function setupWebSocket(wss, mockManager, database) {
       ws
     };
     clients.set(clientId, client);
-    console.log(import_picocolors3.default.green(`[WebSocket] Client connected: ${clientId}`));
+    console.log(import_picocolors4.default.green(`[WebSocket] Client connected: ${clientId}`));
     ws.send(
       JSON.stringify({
         type: "CONNECTED",
@@ -1270,7 +1875,7 @@ function setupWebSocket(wss, mockManager, database) {
         const message = JSON.parse(data.toString());
         handleMessage(client, message);
       } catch (error) {
-        console.error(import_picocolors3.default.red("[WebSocket] Failed to parse message:"), error);
+        console.error(import_picocolors4.default.red("[WebSocket] Failed to parse message:"), error);
         ws.send(
           JSON.stringify({
             type: "ERROR",
@@ -1281,10 +1886,10 @@ function setupWebSocket(wss, mockManager, database) {
     });
     ws.on("close", () => {
       clients.delete(clientId);
-      console.log(import_picocolors3.default.yellow(`[WebSocket] Client disconnected: ${clientId}`));
+      console.log(import_picocolors4.default.yellow(`[WebSocket] Client disconnected: ${clientId}`));
     });
     ws.on("error", (error) => {
-      console.error(import_picocolors3.default.red(`[WebSocket] Error for client ${clientId}:`), error);
+      console.error(import_picocolors4.default.red(`[WebSocket] Error for client ${clientId}:`), error);
       clients.delete(clientId);
     });
     function handleMessage(client2, message) {
@@ -1330,7 +1935,7 @@ function setupWebSocket(wss, mockManager, database) {
           client.id
         );
       } catch (error) {
-        console.error(import_picocolors3.default.red("[WebSocket] Failed to get stats:"), error);
+        console.error(import_picocolors4.default.red("[WebSocket] Failed to get stats:"), error);
       }
     }
   });
@@ -1359,474 +1964,8 @@ function setupWebSocket(wss, mockManager, database) {
   }, 3e4);
 }
 
-// src/server/llm/claude-client.ts
-var import_sdk = __toESM(require("@anthropic-ai/sdk"), 1);
-
-// src/server/llm/prompt-builder.ts
-var PromptBuilder = class {
-  buildMockPrompt(request) {
-    const { method, path: path2, description, context } = request;
-    let prompt = `
-Generate a realistic mock response for the following API endpoint:
-
-**HTTP Method:** ${method}
-**Path:** ${path2}
-${description ? `**Description:** ${description}` : ""}
-
-Requirements:
-1. Generate realistic mock data that matches typical API responses
-2. Include all necessary fields for a complete response
-3. Use appropriate data types (strings, numbers, booleans, arrays, objects)
-4. Provide realistic example values
-5. Include proper HTTP status code
-6. Add optional fields with null values where appropriate
-7. Include metadata fields like id, created_at, updated_at where appropriate
-
-Response format (JSON):
-\`\`\`json
-{
-  "name": "Descriptive name for this endpoint",
-  "method": "${method}",
-  "path": "${path2}",
-  "status": 200,
-  "response": {
-    // Your generated mock data here
-  },
-  "headers": {
-    "Content-Type": "application/json"
-  },
-  "delay": 0,
-  "description": "Brief description",
-  "tags": ["tag1", "tag2"]
-}
-\`\`\`
-`.trim();
-    if (context?.existingMocks && context.existingMocks.length > 0) {
-      prompt += `
-
-Existing mocks in the project:
-${JSON.stringify(context.existingMocks.slice(0, 3), null, 2)}`;
-    }
-    return prompt;
-  }
-  buildSystemPrompt(context = {}) {
-    let prompt = `
-You are an expert API mock generator with deep knowledge of:
-
-- RESTful API design principles
-- GraphQL specifications
-- HTTP protocols and status codes
-- JSON Schema and data modeling
-- Various programming languages and frameworks
-
-Your core responsibilities:
-1. Generate realistic, well-structured mock data
-2. Ensure data consistency across related endpoints
-3. Follow industry best practices for API design
-4. Handle edge cases and error scenarios appropriately
-
-Guidelines:
-- Always return valid JSON
-- Use appropriate HTTP status codes (200 for success, 201 for created, 400 for bad request, 404 for not found, 500 for server error)
-- Include proper response headers
-- Generate realistic example values
-- Maintain consistency in naming conventions
-- Handle optional fields correctly
-- Include error responses when appropriate
-- Consider pagination, filtering, and sorting for list endpoints
-
-When generating mock data:
-- Use realistic names, emails, phone numbers
-- Include appropriate timestamps (ISO 8601 format)
-- Generate realistic IDs (UUIDs or integers)
-- Include relationship fields (foreign keys)
-- Add metadata fields (created_at, updated_at)
-- Use appropriate field types matching the data
-`.trim();
-    if (context?.projectInfo) {
-      prompt += `
-
-Project Context:
-${JSON.stringify(context.projectInfo, null, 2)}`;
-    }
-    return prompt;
-  }
-  buildImprovePrompt(mock, instruction) {
-    return `
-You have the following existing mock:
-
-\`\`\`json
-${JSON.stringify(mock, null, 2)}
-\`\`\`
-
-User wants to improve it with the following instruction:
-"${instruction}"
-
-Please improve the mock according to the instruction while:
-1. Maintaining the existing structure
-2. Enhancing data quality and realism
-3. Adding any missing fields
-4. Improving edge case handling
-5. Keeping response format consistent
-
-Return the improved mock in the same JSON format:
-\`\`\`json
-{
-  "name": "...",
-  "method": "...",
-  "path": "...",
-  "status": ...,
-  "response": { ... },
-  "headers": { ... },
-  "delay": ...,
-  "description": "...",
-  "tags": [...]
-}
-\`\`\`
-`.trim();
-  }
-  buildOpenAPIPrompt(openApiSpec) {
-    return `
-Analyze the following OpenAPI/Swagger specification and generate mock data for all endpoints:
-
-\`\`\`json
-${JSON.stringify(openApiSpec, null, 2)}
-\`\`\`
-
-For each endpoint, generate:
-1. A successful response (200, 201, etc.)
-2. An error response (400, 404, 500, etc.) if applicable
-
-Requirements:
-1. Follow the schema definitions exactly
-2. Use realistic example values
-3. Handle all required fields
-4. Include optional fields with null values where appropriate
-5. Generate array responses with multiple items (3-5 items for lists)
-6. Maintain consistency across related endpoints
-
-Return the result as an array of mock objects:
-\`\`\`json
-[
-  {
-    "name": "Get Users",
-    "method": "GET",
-    "path": "/api/users",
-    "status": 200,
-    "response": { "data": [...], "total": 100 },
-    "headers": { "Content-Type": "application/json" },
-    "delay": 0,
-    "description": "Get all users",
-    "tags": ["users", "list"]
-  }
-]
-\`\`\`
-`.trim();
-  }
-  buildDocumentationPrompt(mock) {
-    return `
-Generate comprehensive API documentation in Markdown format for the following mock endpoint:
-
-\`\`\`json
-${JSON.stringify(mock, null, 2)}
-\`\`\`
-
-Please generate documentation that includes:
-1. Endpoint overview and description
-2. HTTP method and full URL
-3. Request parameters (path, query, headers, body)
-4. Response structure and status codes
-5. Field definitions with types and descriptions
-6. Example requests and responses
-7. Error codes and handling
-
-Format as clean Markdown.
-`.trim();
-  }
-  buildDocumentationSystemPrompt() {
-    return `
-You are an expert API documentation generator with deep knowledge of:
-- RESTful API documentation standards
-- Markdown formatting
-- Multiple programming languages
-- API design best practices
-
-Your task is to generate clear, comprehensive API documentation that is:
-- Well-structured with proper headings
-- Includes all necessary details for developers
-- Has clear examples
-- Uses proper Markdown syntax
-`.trim();
-  }
-  buildCodeExamplesPrompt(mock, languages) {
-    return `
-Generate code examples for calling the following API endpoint in these languages: ${languages.join(", ")}
-
-API Details:
-\`\`\`json
-${JSON.stringify(mock, null, 2)}
-\`\`\`
-
-Requirements:
-1. Generate complete, working examples for each language
-2. Include proper error handling
-3. Add comments explaining the code
-4. Use popular, well-maintained libraries
-5. Include authentication if required
-
-Return as JSON:
-\`\`\`json
-{
-  "javascript": "// code here",
-  "python": "# code here",
-  "curl": "curl command here"
-}
-\`\`\`
-`.trim();
-  }
-};
-
-// src/server/llm/response-parser.ts
-var ResponseParser = class {
-  parseMockResponse(response) {
-    try {
-      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[1]);
-      }
-      const codeMatch = response.match(/```\n([\s\S]*?)\n```/);
-      if (codeMatch) {
-        return JSON.parse(codeMatch[1]);
-      }
-      return JSON.parse(response);
-    } catch (error) {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          return JSON.parse(jsonMatch[0]);
-        } catch {
-          throw new Error(`Failed to parse mock response: ${error.message}`);
-        }
-      }
-      throw new Error("Invalid mock response format - no valid JSON found");
-    }
-  }
-  parseMultipleMocks(response) {
-    try {
-      const data = this.parseMockResponse(response);
-      if (Array.isArray(data)) {
-        return data;
-      }
-      if (data.mocks && Array.isArray(data.mocks)) {
-        return data.mocks;
-      }
-      if (data.endpoints && Array.isArray(data.endpoints)) {
-        return data.endpoints;
-      }
-      throw new Error("Invalid multiple mocks response format");
-    } catch (error) {
-      throw new Error(`Failed to parse multiple mocks: ${error.message}`);
-    }
-  }
-  parseCodeExamples(response, languages) {
-    try {
-      const data = this.parseMockResponse(response);
-      const examples = {};
-      for (const lang of languages) {
-        if (data[lang]) {
-          examples[lang] = data[lang];
-        }
-      }
-      if (Object.keys(examples).length === 0) {
-        languages.forEach((lang) => {
-          const regex = new RegExp(`\`\`\`${lang}\\n([\\s\\S]*?)\\n\`\`\``, "i");
-          const match = response.match(regex);
-          if (match) {
-            examples[lang] = match[1];
-          }
-        });
-      }
-      return examples;
-    } catch (error) {
-      throw new Error(`Failed to parse code examples: ${error.message}`);
-    }
-  }
-  parseDocumentation(response) {
-    return response.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
-  }
-};
-
-// src/server/llm/claude-client.ts
-var import_picocolors4 = __toESM(require("picocolors"), 1);
-var ClaudeClient = class {
-  client = null;
-  promptBuilder;
-  responseParser;
-  config;
-  enabled = false;
-  constructor(config = {}) {
-    this.config = {
-      model: config.model || "claude-sonnet-4-20250514",
-      maxTokens: config.maxTokens || 4096,
-      baseURL: config.baseURL,
-      ...config
-    };
-    this.promptBuilder = new PromptBuilder();
-    this.responseParser = new ResponseParser();
-  }
-  async initialize() {
-    if (!this.config.apiKey) {
-      console.log(import_picocolors4.default.yellow("[Claude] API key not configured, AI features disabled"));
-      return false;
-    }
-    try {
-      this.client = new import_sdk.default({
-        apiKey: this.config.apiKey,
-        baseURL: this.config.baseURL
-      });
-      await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: 10,
-        messages: [{ role: "user", content: "ping" }]
-      });
-      this.enabled = true;
-      console.log(import_picocolors4.default.green("[Claude] Connected successfully"));
-      return true;
-    } catch (error) {
-      console.error(import_picocolors4.default.red("[Claude] Failed to initialize:"), error.message);
-      this.enabled = false;
-      return false;
-    }
-  }
-  isEnabled() {
-    return this.enabled;
-  }
-  async generateMock(request) {
-    if (!this.enabled || !this.client) {
-      throw new Error("Claude client not initialized");
-    }
-    try {
-      const prompt = this.promptBuilder.buildMockPrompt(request);
-      const systemPrompt = this.promptBuilder.buildSystemPrompt(request.context);
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: this.config.maxTokens,
-        system: systemPrompt,
-        messages: [{ role: "user", content: prompt }]
-      });
-      const content = response.content[0];
-      const mockData = this.responseParser.parseMockResponse(content.text);
-      console.log(import_picocolors4.default.green("[Claude] Mock generated successfully"));
-      return {
-        name: mockData.name || request.path,
-        method: mockData.method || request.method,
-        path: mockData.path || request.path,
-        status: mockData.status || 200,
-        response: mockData.response || { message: "Generated by AI" },
-        headers: mockData.headers,
-        delay: mockData.delay || 0,
-        enabled: true,
-        description: mockData.description || request.description,
-        tags: mockData.tags
-      };
-    } catch (error) {
-      console.error(import_picocolors4.default.red("[Claude] Error generating mock:"), error.message);
-      throw new Error(`Failed to generate mock: ${error.message}`);
-    }
-  }
-  async generateMultipleMocks(spec) {
-    if (!this.enabled || !this.client) {
-      throw new Error("Claude client not initialized");
-    }
-    try {
-      const prompt = this.promptBuilder.buildOpenAPIPrompt(spec);
-      const systemPrompt = this.promptBuilder.buildSystemPrompt({});
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: this.config.maxTokens,
-        system: systemPrompt,
-        messages: [{ role: "user", content: prompt }]
-      });
-      const content = response.content[0];
-      const mocks = this.responseParser.parseMultipleMocks(content.text);
-      console.log(import_picocolors4.default.green(`[Claude] Generated ${mocks.length} mocks`));
-      return mocks;
-    } catch (error) {
-      console.error(import_picocolors4.default.red("[Claude] Error generating mocks:"), error.message);
-      throw new Error(`Failed to generate mocks: ${error.message}`);
-    }
-  }
-  async chat(messages, context = {}) {
-    if (!this.enabled || !this.client) {
-      throw new Error("Claude client not initialized");
-    }
-    try {
-      const systemPrompt = this.promptBuilder.buildSystemPrompt(context);
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: this.config.maxTokens,
-        system: systemPrompt,
-        messages
-      });
-      const content = response.content[0];
-      return content.text;
-    } catch (error) {
-      console.error(import_picocolors4.default.red("[Claude] Error in chat:"), error.message);
-      throw new Error(`Chat failed: ${error.message}`);
-    }
-  }
-  async improveMock(mock, instruction) {
-    if (!this.enabled || !this.client) {
-      throw new Error("Claude client not initialized");
-    }
-    try {
-      const prompt = this.promptBuilder.buildImprovePrompt(mock, instruction);
-      const systemPrompt = this.promptBuilder.buildSystemPrompt({});
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: this.config.maxTokens,
-        system: systemPrompt,
-        messages: [{ role: "user", content: prompt }]
-      });
-      const content = response.content[0];
-      const improvedData = this.responseParser.parseMockResponse(content.text);
-      console.log(import_picocolors4.default.green("[Claude] Mock improved successfully"));
-      return improvedData;
-    } catch (error) {
-      console.error(import_picocolors4.default.red("[Claude] Error improving mock:"), error.message);
-      throw new Error(`Failed to improve mock: ${error.message}`);
-    }
-  }
-  async generateDocumentation(mock) {
-    if (!this.enabled || !this.client) {
-      throw new Error("Claude client not initialized");
-    }
-    try {
-      const prompt = this.promptBuilder.buildDocumentationPrompt(mock);
-      const systemPrompt = this.promptBuilder.buildDocumentationSystemPrompt();
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: this.config.maxTokens,
-        system: systemPrompt,
-        messages: [{ role: "user", content: prompt }]
-      });
-      const content = response.content[0];
-      return content.text;
-    } catch (error) {
-      console.error(import_picocolors4.default.red("[Claude] Error generating documentation:"), error.message);
-      throw new Error(`Failed to generate documentation: ${error.message}`);
-    }
-  }
-};
-var claudeClient = null;
-function getClaudeClient(config) {
-  if (!claudeClient) {
-    claudeClient = new ClaudeClient(config);
-  }
-  return claudeClient;
-}
-
 // src/server/index.ts
+init_claude_client();
 var import_picocolors5 = __toESM(require("picocolors"), 1);
 var import_fs2 = __toESM(require("fs"), 1);
 var import_meta = {};
@@ -1844,7 +1983,10 @@ function loadConfig() {
     webPort: parseInt(process.env.WEB_PORT || envConfig.webPort || "3000"),
     backendUrl: process.env.BACKEND_URL || envConfig.backendUrl,
     dbPath: process.env.DB_PATH || envConfig.dbPath || "./data/mocks.db",
-    claudeApiKey: process.env.ANTHROPIC_API_KEY || envConfig.claudeApiKey
+    claudeApiKey: process.env.ANTHROPIC_API_KEY || envConfig.apiKey || envConfig.claudeApiKey,
+    provider: envConfig.provider || "anthropic",
+    baseUrl: envConfig.baseUrl,
+    model: envConfig.model
   };
 }
 var MockServer = class {
@@ -1867,7 +2009,9 @@ var MockServer = class {
     this.database = new Database(this.config.dbPath);
     this.mockManager = new MockManager(this.database);
     this.claudeClient = getClaudeClient({
-      apiKey: this.config.claudeApiKey
+      apiKey: this.config.claudeApiKey,
+      baseURL: this.config.baseUrl,
+      model: this.config.model
     });
     this.setupMiddleware();
     this.setupRoutes();
@@ -1884,16 +2028,6 @@ var MockServer = class {
         console.log(
           `${import_picocolors5.default.gray((/* @__PURE__ */ new Date()).toISOString())} ${import_picocolors5.default.blue(req.method)} ${req.path} ${import_picocolors5.default.yellow(res.statusCode.toString())} ${import_picocolors5.default.gray(duration + "ms")}`
         );
-        this.broadcast({
-          type: "REQUEST",
-          data: {
-            method: req.method,
-            path: req.path,
-            status: res.statusCode,
-            duration,
-            timestamp: (/* @__PURE__ */ new Date()).toISOString()
-          }
-        });
       });
       next();
     });
@@ -1903,6 +2037,7 @@ var MockServer = class {
   }
   setupWebSocket() {
     setupWebSocket(this.wss, this.mockManager, this.database);
+    setWebSocketServer(this.wss);
   }
   broadcast(data) {
     const message = JSON.stringify(data);
