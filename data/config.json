@@ -1,0 +1,6 @@
+{
+  "provider": "custom",
+  "apiKey": "sk-cp-YsTPeJNjrZi_AFJPEkQc8nXSGwU-v7fCoUpAthuUnex5Z1h28jXHjk4r1RVzQ0RNR5Fff01Jc8EIERngFtw4G8XgQRoV4Xyfm6Vp7B6ujMN-W0Nx42qYro4",
+  "baseUrl": "https://api.minimaxi.com/anthropic",
+  "model": "MiniMax-M2.5-highspeed"
+}
