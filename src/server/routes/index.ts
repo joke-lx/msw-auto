@@ -4,8 +4,10 @@ import http from 'http'
 import type { MockManager } from '../mock/manager.js'
 import type { Database } from '../storage/database.js'
 import type { ClaudeClient } from '../llm/claude-client.js'
+import type { ContractManager } from '../contract/manager.js'
 import { VersionManager } from '../mock/version-manager.js'
 import { ImportExporter } from '../import-export/importer.js'
+import { setupContractRoutes } from './contracts.js'
 import pc from 'picocolors'
 import { WebSocketServer } from 'ws'
 
@@ -42,7 +44,8 @@ export function setupRoutes(
   mockManager: MockManager,
   database: Database,
   config: ServerConfig,
-  claudeClient: ClaudeClient
+  claudeClient: ClaudeClient,
+  contractManager?: ContractManager
 ) {
   const versionManager = new VersionManager(database)
   const importer = new ImportExporter()
@@ -535,6 +538,11 @@ export function setupRoutes(
       res.status(500).json({ error: error.message })
     }
   })
+
+  // ============ Contract Management Routes ============
+  if (contractManager) {
+    setupContractRoutes(app, contractManager, database)
+  }
 
   // ============ Catch-all: Mock Handler ============
   app.all('*', async (req, res) => {

@@ -4,9 +4,9 @@
  */
 
 import crypto from 'crypto'
-import { OpenAPIDiscovery } from '../contract/discovery.js'
-import { SchemaBasedMockGenerator } from '../contract/mock-generator.js'
-import { TypeScriptTypeGenerator } from '../contract/type-generator.js'
+import { OpenAPIDiscovery } from '../../contract/discovery.js'
+import { SchemaBasedMockGenerator } from '../../contract/mock-generator.js'
+import { TypeScriptTypeGenerator } from '../../contract/type-generator.js'
 import type { Database } from '../storage/database.js'
 import type {
   Contract,

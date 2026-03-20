@@ -3,7 +3,7 @@
  */
 
 import express from 'express'
-import type { ContractManager } from '../contract/manager.js'
+import type { ContractManager } from '../../contract/manager.js'
 import type { Database } from '../storage/database.js'
 
 export function setupContractRoutes(

@@ -707,12 +707,980 @@ var MockManager = class {
   }
 };
 
+// src/server/contract/manager.ts
+var import_crypto4 = __toESM(require("crypto"), 1);
+
+// src/contract/discovery.ts
+var import_fs = require("fs");
+var import_path = require("path");
+var import_crypto2 = __toESM(require("crypto"), 1);
+var OpenAPIDiscovery = class {
+  commonEndpoints = [
+    "/api-docs",
+    "/swagger.json",
+    "/swagger/v1/swagger.json",
+    "/openapi.json",
+    "/api/openapi.json",
+    "/v3/api-docs",
+    "/v2/api-docs",
+    "/docs/swagger.json",
+    "/api-json"
+  ];
+  commonPaths = [
+    "swagger.json",
+    "swagger.yaml",
+    "openapi.json",
+    "openapi.yaml",
+    "api-docs.json",
+    "api-docs.yaml",
+    ".swagger/swagger.json",
+    ".swagger/openapi.json"
+  ];
+  /**
+   * 自动发现项目中的 OpenAPI 文档
+   */
+  async discover(options) {
+    const sources = [];
+    const liveSources = await this.checkLiveEndpoints(options);
+    sources.push(...liveSources);
+    const fileSources = this.checkStaticFiles(options.projectPath);
+    sources.push(...fileSources);
+    const configSources = this.checkConfigFiles(options.projectPath);
+    sources.push(...configSources);
+    return sources;
+  }
+  /**
+   * 检查运行中的后端服务
+   */
+  async checkLiveEndpoints(options) {
+    const sources = [];
+    const serverUrl = options.backendUrl || await this.detectBackendUrl(options.projectPath);
+    if (!serverUrl) {
+      return sources;
+    }
+    for (const endpoint of this.commonEndpoints) {
+      try {
+        const response = await fetch(`${serverUrl}${endpoint}`, {
+          signal: AbortSignal.timeout(options.timeout || 5e3),
+          headers: {
+            "Accept": "application/json,application/swagger+json,application/vnd.oai.openapi"
+          }
+        });
+        if (response.ok) {
+          const spec = await response.json();
+          const version = this.detectVersion(spec);
+          if (version !== "unknown") {
+            sources.push({
+              type: version,
+              source: "live",
+              url: `${serverUrl}${endpoint}`,
+              spec,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              hash: this.generateHash(spec)
+            });
+            console.log(`\u2705 Found OpenAPI ${version} at: ${serverUrl}${endpoint}`);
+            break;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+    return sources;
+  }
+  /**
+   * 检查静态文件
+   */
+  checkStaticFiles(projectPath) {
+    const sources = [];
+    for (const relativePath of this.commonPaths) {
+      const fullPath = (0, import_path.join)(projectPath, relativePath);
+      if ((0, import_fs.existsSync)(fullPath)) {
+        try {
+          const content = (0, import_fs.readFileSync)(fullPath, "utf-8");
+          const spec = this.parseContent(content);
+          if (spec) {
+            const version = this.detectVersion(spec);
+            if (version !== "unknown") {
+              sources.push({
+                type: version,
+                source: "file",
+                path: fullPath,
+                spec,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                hash: this.generateHash(spec)
+              });
+              console.log(`\u2705 Found OpenAPI ${version} at: ${fullPath}`);
+            }
+          }
+        } catch (error) {
+          continue;
+        }
+      }
+    }
+    return sources;
+  }
+  /**
+   * 检查配置文件
+   */
+  checkConfigFiles(projectPath) {
+    const sources = [];
+    const packageJsonPath = (0, import_path.join)(projectPath, "package.json");
+    if ((0, import_fs.existsSync)(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse((0, import_fs.readFileSync)(packageJsonPath, "utf-8"));
+        const config = packageJson.mswAuto;
+        if (config?.openApiUrl) {
+        }
+        if (config?.openApiPath) {
+          const fullPath = (0, import_path.join)(projectPath, config.openApiPath);
+          if ((0, import_fs.existsSync)(fullPath)) {
+            const content = (0, import_fs.readFileSync)(fullPath, "utf-8");
+            const spec = this.parseContent(content);
+            if (spec) {
+              const version = this.detectVersion(spec);
+              if (version !== "unknown") {
+                sources.push({
+                  type: version,
+                  source: "config",
+                  path: fullPath,
+                  spec,
+                  timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                  hash: this.generateHash(spec)
+                });
+                console.log(`\u2705 Found OpenAPI ${version} from config: ${fullPath}`);
+              }
+            }
+          }
+        }
+      } catch {
+      }
+    }
+    return sources;
+  }
+  /**
+   * 检测后端 URL
+   */
+  async detectBackendUrl(projectPath) {
+    const defaultUrls = [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:8000",
+      "http://localhost:8080",
+      "http://127.0.0.1:3000"
+    ];
+    const packageJsonPath = (0, import_path.join)(projectPath, "package.json");
+    if ((0, import_fs.existsSync)(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse((0, import_fs.readFileSync)(packageJsonPath, "utf-8"));
+        const config = packageJson.mswAuto;
+        if (config?.backendUrl) {
+          return config.backendUrl;
+        }
+      } catch {
+      }
+    }
+    for (const url of defaultUrls) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(1e3)
+        });
+        if (response.ok || response.status === 404) {
+          return url;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+  /**
+   * 检测 OpenAPI 版本
+   */
+  detectVersion(spec) {
+    if (!spec || typeof spec !== "object") {
+      return "unknown";
+    }
+    if (spec.openapi) {
+      const version = spec.openapi;
+      if (typeof version === "string" && version.startsWith("3.")) {
+        return "openapi3";
+      }
+    }
+    if (spec.swagger) {
+      const version = spec.swagger;
+      if (typeof version === "string" && version.startsWith("2.")) {
+        return "swagger2";
+      }
+    }
+    return "unknown";
+  }
+  /**
+   * 解析内容
+   */
+  parseContent(content) {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+  /**
+   * 生成内容哈希
+   */
+  generateHash(spec) {
+    const content = JSON.stringify(spec);
+    return import_crypto2.default.createHash("sha256").update(content).digest("hex");
+  }
+};
+
+// src/contract/mock-generator.ts
+var import_crypto3 = __toESM(require("crypto"), 1);
+var SchemaBasedMockGenerator = class {
+  defaultMaxDepth = 5;
+  /**
+   * 从 OpenAPI schema 生成精确 Mock 数据
+   */
+  generateFromSchema(endpoint, method, schema, context) {
+    const ctx = { ...context, depth: (context?.depth || 0) + 1 };
+    return this.generateValue(schema, ctx);
+  }
+  /**
+   * 递归生成值
+   */
+  generateValue(schema, context) {
+    if (context?.depth && context.maxDepth && context.depth > context.maxDepth) {
+      return null;
+    }
+    if (schema.$ref) {
+      return this.generateFallbackValue(schema.$ref);
+    }
+    if (schema.allOf && schema.allOf.length > 0) {
+      return this.mergeSchemas(schema.allOf, context);
+    }
+    if (schema.oneOf && schema.oneOf.length > 0) {
+      const selected = schema.oneOf[Math.floor(Math.random() * schema.oneOf.length)];
+      return this.generateValue(selected, context);
+    }
+    if (schema.anyOf && schema.anyOf.length > 0) {
+      const selected = schema.anyOf[Math.floor(Math.random() * schema.anyOf.length)];
+      return this.generateValue(selected, context);
+    }
+    switch (schema.type) {
+      case "string":
+        return this.generateString(schema, context?.fieldName);
+      case "number":
+      case "integer":
+        return this.generateNumber(schema);
+      case "boolean":
+        return Math.random() > 0.5;
+      case "array":
+        return this.generateArray(schema, context);
+      case "object":
+        return this.generateObject(schema, context);
+      default:
+        return this.generateFallbackValue(schema.type || "unknown");
+    }
+  }
+  /**
+   * 生成字符串
+   */
+  generateString(schema, fieldName) {
+    if (schema.format) {
+      return this.generateStringByFormat(schema.format);
+    }
+    if (fieldName) {
+      const semantic = this.generateStringByFieldName(fieldName);
+      if (semantic) {
+        return semantic;
+      }
+    }
+    if (schema.enum && schema.enum.length > 0) {
+      return schema.enum[Math.floor(Math.random() * schema.enum.length)];
+    }
+    if (schema.pattern) {
+      return this.generateStringByPattern(schema.pattern);
+    }
+    const minLength = schema.minLength || 1;
+    const maxLength = schema.maxLength || 20;
+    const length = Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
+    const examples = ["example", "sample", "test", "value"];
+    return examples[Math.floor(Math.random() * examples.length)].substring(0, length);
+  }
+  /**
+   * 根据 format 生成字符串
+   */
+  generateStringByFormat(format) {
+    const formatGenerators = {
+      "email": () => "user@example.com",
+      "date-time": () => (/* @__PURE__ */ new Date()).toISOString(),
+      "date": () => (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+      "time": () => "10:30:00",
+      "uri": () => "https://example.com/resource",
+      "url": () => "https://example.com/resource",
+      "uuid": () => import_crypto3.default.randomUUID(),
+      "byte": () => "SGVsbG8gV29ybGQ=",
+      "binary": () => "binary-data",
+      "password": () => "SecurePass123!",
+      "hostname": () => "example.com",
+      "ipv4": () => "192.168.1.1",
+      "ipv6": () => "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+    };
+    const generator = formatGenerators[format.toLowerCase()];
+    return generator ? generator() : "example";
+  }
+  /**
+   * 根据字段名生成语义化字符串
+   */
+  generateStringByFieldName(fieldName) {
+    const name = fieldName.toLowerCase();
+    const patterns = {
+      "email": "user@example.com",
+      "mail": "user@example.com",
+      "name": "John Doe",
+      "username": "johndoe",
+      "password": "SecurePass123!",
+      "passwd": "SecurePass123!",
+      "phone": "+1-555-0123-4567",
+      "mobile": "+1-555-0123-4567",
+      "tel": "+1-555-0123-4567",
+      "avatar": "https://i.pravatar.cc/150?u=1",
+      "image": "https://picsum.photos/150/150",
+      "photo": "https://picsum.photos/150/150",
+      "picture": "https://picsum.photos/150/150",
+      "address": "123 Main St, City, Country",
+      "zip": "12345",
+      "postal": "12345",
+      "code": "12345",
+      "company": "Acme Corporation",
+      "organization": "Acme Corporation",
+      "org": "Acme Corporation",
+      "title": "Software Engineer",
+      "role": "Software Engineer",
+      "position": "Software Engineer",
+      "job": "Software Engineer",
+      "description": "Lorem ipsum dolor sit amet",
+      "content": "Lorem ipsum dolor sit amet",
+      "body": "Lorem ipsum dolor sit amet",
+      "text": "Lorem ipsum dolor sit amet",
+      "url": "https://example.com/resource",
+      "link": "https://example.com/page",
+      "href": "https://example.com/page",
+      "website": "https://example.com",
+      "domain": "example.com",
+      "host": "example.com",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "key": "key_" + import_crypto3.default.randomUUID().slice(0, 8),
+      "id": import_crypto3.default.randomUUID(),
+      "uuid": import_crypto3.default.randomUUID(),
+      "guid": import_crypto3.default.randomUUID(),
+      "created": (/* @__PURE__ */ new Date()).toISOString(),
+      "updated": (/* @__PURE__ */ new Date()).toISOString(),
+      "date": (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+      "time": "10:30:00",
+      "datetime": (/* @__PURE__ */ new Date()).toISOString(),
+      "timestamp": Date.now().toString(),
+      "status": "active",
+      "state": "active",
+      "type": "standard",
+      "category": "general",
+      "tag": "sample",
+      "label": "Sample Label",
+      "locale": "en-US",
+      "lang": "en",
+      "language": "en",
+      "currency": "USD",
+      "price": "99.99",
+      "amount": "100.00",
+      "color": "#3498db",
+      "colour": "#3498db"
+    };
+    if (patterns[name]) {
+      return patterns[name];
+    }
+    for (const [key, value] of Object.entries(patterns)) {
+      if (name.includes(key)) {
+        return value;
+      }
+    }
+    return null;
+  }
+  /**
+   * 根据正则表达式生成字符串（简化版）
+   */
+  generateStringByPattern(pattern) {
+    if (pattern === "^[a-z]+$") {
+      return "example";
+    }
+    if (pattern === "^[A-Z]+$") {
+      return "EXAMPLE";
+    }
+    if (pattern.includes("\\d")) {
+      return "123";
+    }
+    if (pattern.includes("@")) {
+      return "user@example.com";
+    }
+    if (pattern.includes("^\\d+$")) {
+      return "123456";
+    }
+    return "example";
+  }
+  /**
+   * 生成数字
+   */
+  generateNumber(schema) {
+    const min = schema.minimum ?? 0;
+    const max = schema.maximum ?? 100;
+    if (schema.type === "integer") {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    return parseFloat((Math.random() * (max - min) + min).toFixed(2));
+  }
+  /**
+   * 生成数组
+   */
+  generateArray(schema, context) {
+    const minItems = schema.minItems ?? 1;
+    const maxItems = schema.maxItems ?? 5;
+    const count = Math.floor(Math.random() * (maxItems - minItems + 1)) + minItems;
+    if (!schema.items) {
+      return [];
+    }
+    return Array.from(
+      { length: count },
+      () => this.generateValue(schema.items, context)
+    );
+  }
+  /**
+   * 生成对象
+   */
+  generateObject(schema, context) {
+    const obj = {};
+    const properties = schema.properties || {};
+    for (const [name, propSchema] of Object.entries(properties)) {
+      const isRequired = (schema.required || []).includes(name);
+      if (isRequired || Math.random() > 0.3) {
+        obj[name] = this.generateValue(propSchema, {
+          ...context,
+          fieldName: name
+        });
+      }
+    }
+    return obj;
+  }
+  /**
+   * 合并 allOf schemas
+   */
+  mergeSchemas(schemas, context) {
+    const merged = {};
+    for (const schema of schemas) {
+      const value = this.generateValue(schema, context);
+      if (value && typeof value === "object") {
+        Object.assign(merged, value);
+      }
+    }
+    return merged;
+  }
+  /**
+   * 生成回退值
+   */
+  generateFallbackValue(type) {
+    const fallbacks = {
+      "string": "example",
+      "number": 42,
+      "integer": 42,
+      "boolean": true,
+      "array": [],
+      "object": {}
+    };
+    return fallbacks[type] || null;
+  }
+};
+
+// src/contract/type-generator.ts
+var TypeScriptTypeGenerator = class {
+  defaultOptions = {
+    exportType: "interface",
+    includeComments: true,
+    semicolons: true
+  };
+  /**
+   * 从 OpenAPI spec 生成 TypeScript 类型
+   */
+  generateTypes(openAPISpec, options) {
+    const opts = { ...this.defaultOptions, ...options };
+    let output = this.generateHeader();
+    output += "\n";
+    if (openAPISpec.components?.schemas) {
+      for (const [name, schema] of Object.entries(openAPISpec.components.schemas)) {
+        output += this.generateSchemaType(name, schema, opts);
+        output += "\n";
+      }
+    }
+    if (openAPISpec.definitions) {
+      for (const [name, schema] of Object.entries(openAPISpec.definitions)) {
+        output += this.generateSchemaType(name, schema, opts);
+        output += "\n";
+      }
+    }
+    return output;
+  }
+  /**
+   * 生成单个 schema 的类型
+   */
+  generateSchemaType(name, schema, options) {
+    const comment = this.generateComment(schema);
+    const typeName = this.getTypeName(name, options);
+    if (schema.type === "object" || schema.properties) {
+      return this.generateInterface(typeName, schema, options, comment);
+    }
+    if (schema.enum) {
+      return this.generateEnum(typeName, schema.enum, options, comment);
+    }
+    const tsType = this.toTypeString(schema, options);
+    return `${comment}${this.exportKeyword(options)} ${typeName} = ${tsType}${options.semicolons ? ";" : ""}
+`;
+  }
+  /**
+   * 生成接口
+   */
+  generateInterface(name, schema, options, comment) {
+    let output = `${comment}${this.exportKeyword(options)} ${name} {
+`;
+    if (schema.properties) {
+      for (const [propName, propSchema] of Object.entries(schema.properties)) {
+        const isRequired = (schema.required || []).includes(propName);
+        const optional = isRequired ? "" : "?";
+        const propComment = this.generateComment(propSchema, "  ");
+        const tsType = this.toTypeString(propSchema, options);
+        output += `${propComment}  ${propName}${optional}: ${tsType}${options.semicolons ? ";" : ""}
+`;
+      }
+    }
+    output += "}";
+    if (options.exportType === "both") {
+      return output + `
+
+${this.exportKeyword(options)} type ${name}Type = ${name}
+`;
+    }
+    return output + "\n";
+  }
+  /**
+   * 生成枚举
+   */
+  generateEnum(name, enumValues, options, comment) {
+    let output = `${comment}${this.exportKeyword(options)} enum ${name} {
+`;
+    for (const value of enumValues) {
+      const enumKey = this.toEnumKey(value);
+      const enumValue = typeof value === "string" ? `"${value}"` : value;
+      output += `  ${enumKey} = ${enumValue},
+`;
+    }
+    output += "}\n";
+    return output;
+  }
+  /**
+   * 转换为 TypeScript 类型字符串
+   */
+  toTypeString(schema, options) {
+    if (schema.$ref) {
+      const refName = this.getRefTypeName(schema.$ref, options);
+      return refName;
+    }
+    if (schema.type === "array") {
+      const itemType = schema.items ? this.toTypeString(schema.items, options) : "any";
+      return `${itemType}[]`;
+    }
+    if (schema.type === "object") {
+      if (schema.additionalProperties) {
+        const valueType = this.toTypeString(schema.additionalProperties, options);
+        return `Record<string, ${valueType}>`;
+      }
+      return "Record<string, any>";
+    }
+    switch (schema.type) {
+      case "string":
+        return "string";
+      case "number":
+      case "integer":
+        return "number";
+      case "boolean":
+        return "boolean";
+      default:
+        return "any";
+    }
+  }
+  /**
+   * 从 $ref 获取类型名
+   */
+  getRefTypeName(ref, options) {
+    const parts = ref.split("/");
+    const name = parts[parts.length - 1];
+    return this.getTypeName(name, options);
+  }
+  /**
+   * 获取类型名
+   */
+  getTypeName(name, options) {
+    let typeName = pascalCase(name);
+    if (options.prefix) {
+      typeName = options.prefix + typeName;
+    }
+    if (options.suffix) {
+      typeName = typeName + options.suffix;
+    }
+    return typeName;
+  }
+  /**
+   * 转换为枚举键名
+   */
+  toEnumKey(value) {
+    if (typeof value === "string") {
+      return value.replace(/[^a-zA-Z0-9]/g, "_").replace(/^[0-9]/, "_$&").toUpperCase();
+    }
+    return `VALUE_${value}`;
+  }
+  /**
+   * 生成注释
+   */
+  generateComment(schema, indent = "") {
+    if (!schema.description && !schema.title) {
+      return "";
+    }
+    const lines = [];
+    if (schema.title) {
+      lines.push(schema.title);
+    }
+    if (schema.description) {
+      lines.push(schema.description);
+    }
+    if (lines.length === 0) {
+      return "";
+    }
+    const comment = lines.join("\n * ");
+    return `${indent}/**
+${indent} * ${comment}
+${indent} */
+`;
+  }
+  /**
+   * 生成文件头
+   */
+  generateHeader() {
+    return `/**
+ * Auto-generated by MSW Auto
+ * DO NOT EDIT MANUALLY
+ */
+`;
+  }
+  /**
+   * 获取导出关键字
+   */
+  exportKeyword(options) {
+    return options.exportType === "type" ? "export type" : "export interface";
+  }
+};
+function pascalCase(str) {
+  return str.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()).replace(/\s/g, "");
+}
+
+// src/server/contract/manager.ts
+var ContractManager = class {
+  constructor(database) {
+    this.database = database;
+    this.discovery = new OpenAPIDiscovery();
+    this.mockGenerator = new SchemaBasedMockGenerator();
+    this.typeGenerator = new TypeScriptTypeGenerator();
+    this.loadContracts();
+  }
+  contracts = /* @__PURE__ */ new Map();
+  discovery;
+  mockGenerator;
+  typeGenerator;
+  async loadContracts() {
+    try {
+      const contracts = await this.database.getAllContracts();
+      contracts.forEach((contract) => {
+        this.contracts.set(contract.id, contract);
+      });
+    } catch (error) {
+      console.log("[ContractManager] Using in-memory storage");
+    }
+  }
+  /**
+   * 获取所有契约
+   */
+  async findAll() {
+    return Array.from(this.contracts.values());
+  }
+  /**
+   * 根据 ID 获取契约
+   */
+  async findById(id) {
+    return this.contracts.get(id) || null;
+  }
+  /**
+   * 创建契约
+   */
+  async create(dto) {
+    const hash = this.generateHash(dto.spec);
+    const contract = {
+      id: `contract_${import_crypto4.default.randomUUID()}`,
+      name: dto.name,
+      sourceType: dto.sourceType,
+      sourceUrl: dto.sourceUrl,
+      version: this.detectVersion(dto.spec),
+      spec: dto.spec,
+      hash,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    this.contracts.set(contract.id, contract);
+    try {
+      await this.database.saveContract(contract);
+    } catch (error) {
+    }
+    return contract;
+  }
+  /**
+   * 更新契约
+   */
+  async update(id, updates) {
+    const existing = this.contracts.get(id);
+    if (!existing) return null;
+    const updated = {
+      ...existing,
+      ...updates,
+      spec: updates.spec || existing.spec,
+      hash: updates.spec ? this.generateHash(updates.spec) : existing.hash,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    this.contracts.set(id, updated);
+    try {
+      await this.database.saveContract(updated);
+    } catch (error) {
+    }
+    return updated;
+  }
+  /**
+   * 删除契约
+   */
+  async delete(id) {
+    const existed = this.contracts.has(id);
+    this.contracts.delete(id);
+    try {
+      await this.database.deleteContract(id);
+    } catch (error) {
+    }
+    return existed;
+  }
+  /**
+   * 发现契约（自动发现项目中的 OpenAPI 文档）
+   */
+  async discover(options) {
+    const sources = await this.discovery.discover({
+      projectPath: options.projectPath || process.cwd(),
+      backendUrl: options.backendUrl
+    });
+    const contracts = [];
+    for (const source of sources) {
+      const existing = Array.from(this.contracts.values()).find(
+        (c) => c.hash === source.hash
+      );
+      if (existing) {
+        existing.lastSyncedAt = (/* @__PURE__ */ new Date()).toISOString();
+        contracts.push(existing);
+        continue;
+      }
+      const name = this.generateContractName(source);
+      const contract = await this.create({
+        name,
+        sourceType: source.source,
+        sourceUrl: source.url,
+        spec: source.spec
+      });
+      contracts.push(contract);
+    }
+    return contracts;
+  }
+  /**
+   * 同步契约（重新获取最新内容）
+   */
+  async sync(id) {
+    const contract = this.contracts.get(id);
+    if (!contract) return null;
+    if (contract.sourceType === "live" && contract.sourceUrl) {
+      try {
+        const response = await fetch(contract.sourceUrl);
+        if (response.ok) {
+          const spec = await response.json();
+          return await this.update(id, { spec });
+        }
+      } catch (error) {
+        console.error(`Failed to sync contract ${id}:`, error);
+      }
+    }
+    return contract;
+  }
+  /**
+   * 生成 Mock 数据
+   */
+  generateMocks(contractId, endpoint, method) {
+    const contract = this.contracts.get(contractId);
+    if (!contract) {
+      throw new Error(`Contract not found: ${contractId}`);
+    }
+    const results = [];
+    if (contract.spec.paths) {
+      for (const [path2, methods] of Object.entries(contract.spec.paths)) {
+        if (endpoint && !this.matchPath(path2, endpoint)) {
+          continue;
+        }
+        for (const [httpMethod, operation] of Object.entries(methods)) {
+          if (method && httpMethod.toUpperCase() !== method.toUpperCase()) {
+            continue;
+          }
+          const schema = operation.responses?.["200"]?.content?.["application/json"]?.schema;
+          if (schema) {
+            const mock = this.mockGenerator.generateFromSchema(
+              path2,
+              httpMethod,
+              schema
+            );
+            results.push({
+              contractId,
+              endpoint: path2,
+              method: httpMethod,
+              mock,
+              variants: {
+                empty: this.generateEmptyMock(schema),
+                error: this.generateErrorMock()
+              },
+              generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            });
+          }
+        }
+      }
+    }
+    return results;
+  }
+  /**
+   * 生成 TypeScript 类型
+   */
+  generateTypes(contractId) {
+    const contract = this.contracts.get(contractId);
+    if (!contract) {
+      throw new Error(`Contract not found: ${contractId}`);
+    }
+    const types = this.typeGenerator.generateTypes(contract.spec);
+    const interfaces = [];
+    if (contract.spec.components?.schemas) {
+      interfaces.push(...Object.keys(contract.spec.components.schemas));
+    }
+    if (contract.spec.definitions) {
+      interfaces.push(...Object.keys(contract.spec.definitions));
+    }
+    return {
+      contractId,
+      types,
+      filePath: `src/types/api/${this.sanitizeName(contract.name)}.ts`,
+      interfaces,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  /**
+   * 比较两个契约的差异
+   */
+  diff(contractId, version1, version2) {
+    return {
+      added: [],
+      removed: [],
+      modified: [],
+      breaking: false
+    };
+  }
+  /**
+   * 检测 OpenAPI 版本
+   */
+  detectVersion(spec) {
+    if (spec.openapi) {
+      return "openapi3";
+    }
+    if (spec.swagger) {
+      return "swagger2";
+    }
+    return "openapi3";
+  }
+  /**
+   * 生成内容哈希
+   */
+  generateHash(spec) {
+    const content = JSON.stringify(spec);
+    const crypto8 = require("crypto");
+    return crypto8.createHash("sha256").update(content).digest("hex");
+  }
+  /**
+   * 生成契约名称
+   */
+  generateContractName(source) {
+    if (source.spec.info?.title) {
+      return source.spec.info.title;
+    }
+    if (source.url) {
+      return new URL(source.url).hostname;
+    }
+    if (source.path) {
+      const parts = source.path.split(/[/\\]/);
+      return parts[parts.length - 1] || "API";
+    }
+    return "API Contract";
+  }
+  /**
+   * 清理名称用于文件路径
+   */
+  sanitizeName(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+  /**
+   * 匹配路径
+   */
+  pathMatch(pattern, path2) {
+    const regex = new RegExp(
+      "^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$"
+    );
+    return regex.test(path2);
+  }
+  /**
+   * 生成空数组 Mock
+   */
+  generateEmptyMock(schema) {
+    if (schema.type === "array") {
+      return [];
+    }
+    return {};
+  }
+  /**
+   * 生成错误 Mock
+   */
+  generateErrorMock() {
+    return {
+      error: "Internal Server Error",
+      message: "An error occurred",
+      code: 500
+    };
+  }
+};
+
 // src/server/storage/database.ts
-var import_fs = __toESM(require("fs"), 1);
-var import_path = __toESM(require("path"), 1);
+var import_fs2 = __toESM(require("fs"), 1);
+var import_path2 = __toESM(require("path"), 1);
 var InMemoryStorage = class {
   mocks = /* @__PURE__ */ new Map();
   versions = /* @__PURE__ */ new Map();
+  contracts = /* @__PURE__ */ new Map();
   requestLogs = [];
   // Mock 操作
   async getAllMocks() {
@@ -761,6 +1729,21 @@ var InMemoryStorage = class {
   async getRecentRequests(limit) {
     return this.requestLogs.slice(0, limit);
   }
+  // Contract operations
+  async getAllContracts() {
+    return Array.from(this.contracts.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }
+  async getContractById(id) {
+    return this.contracts.get(id) || null;
+  }
+  async saveContract(contract) {
+    this.contracts.set(contract.id, contract);
+  }
+  async deleteContract(id) {
+    this.contracts.delete(id);
+  }
 };
 var Database = class {
   db = null;
@@ -774,9 +1757,9 @@ var Database = class {
   async connect() {
     try {
       const Database2 = (await import("better-sqlite3")).default;
-      const dir = import_path.default.dirname(this.dbPath);
-      if (!import_fs.default.existsSync(dir)) {
-        import_fs.default.mkdirSync(dir, { recursive: true });
+      const dir = import_path2.default.dirname(this.dbPath);
+      if (!import_fs2.default.existsSync(dir)) {
+        import_fs2.default.mkdirSync(dir, { recursive: true });
       }
       this.db = new Database2(this.dbPath);
       this.db.pragma("journal_mode = WAL");
@@ -834,10 +1817,25 @@ var Database = class {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS contracts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_url TEXT,
+        version TEXT NOT NULL,
+        spec TEXT NOT NULL,
+        hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_synced_at TEXT
+      );
+
       CREATE INDEX IF NOT EXISTS idx_mocks_method_path ON mocks(method, path);
       CREATE INDEX IF NOT EXISTS idx_mocks_enabled ON mocks(enabled);
       CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp ON request_logs(timestamp DESC);
       CREATE INDEX IF NOT EXISTS idx_mock_versions_mock_id ON mock_versions(mock_id, version DESC);
+      CREATE INDEX IF NOT EXISTS idx_contracts_created_at ON contracts(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_contracts_hash ON contracts(hash);
     `);
   }
   // ============ Mock Operations ============
@@ -1025,6 +2023,79 @@ var Database = class {
       return [];
     }
   }
+  // ============ Contract Operations ============
+  async getAllContracts() {
+    if (this.useMemory) return this.memory.getAllContracts();
+    try {
+      const rows = this.db.prepare("SELECT * FROM contracts ORDER BY created_at DESC").all();
+      return rows.map(this.mapRowToContract);
+    } catch {
+      return [];
+    }
+  }
+  async getContractById(id) {
+    if (this.useMemory) return this.memory.getContractById(id);
+    try {
+      const row = this.db.prepare("SELECT * FROM contracts WHERE id = ?").get(id);
+      return row ? this.mapRowToContract(row) : null;
+    } catch {
+      return null;
+    }
+  }
+  async saveContract(contract) {
+    if (this.useMemory) return this.memory.saveContract(contract);
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO contracts (id, name, source_type, source_url, version, spec, hash, created_at, updated_at, last_synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        contract.id,
+        contract.name,
+        contract.sourceType,
+        contract.sourceUrl || null,
+        contract.version,
+        JSON.stringify(contract.spec),
+        contract.hash,
+        contract.createdAt,
+        contract.updatedAt,
+        contract.lastSyncedAt || null
+      );
+    } catch {
+    }
+  }
+  async updateContract(contract) {
+    if (this.useMemory) {
+      this.memory.saveContract(contract);
+      return;
+    }
+    try {
+      const stmt = this.db.prepare(`
+        UPDATE contracts SET name = ?, source_type = ?, source_url = ?, version = ?, spec = ?,
+          hash = ?, updated_at = ?, last_synced_at = ?
+          WHERE id = ?
+      `);
+      stmt.run(
+        contract.name,
+        contract.sourceType,
+        contract.sourceUrl || null,
+        contract.version,
+        JSON.stringify(contract.spec),
+        contract.hash,
+        contract.updatedAt,
+        contract.lastSyncedAt || null,
+        contract.id
+      );
+    } catch {
+    }
+  }
+  async deleteContract(id) {
+    if (this.useMemory) return this.memory.deleteContract(id);
+    try {
+      this.db.prepare("DELETE FROM contracts WHERE id = ?").run(id);
+    } catch {
+    }
+  }
   // ============ Helpers ============
   mapRowToMock(row) {
     return {
@@ -1045,17 +2116,31 @@ var Database = class {
       updated_at: row.updated_at
     };
   }
+  mapRowToContract(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      sourceType: row.source_type,
+      sourceUrl: row.source_url,
+      version: row.version,
+      spec: JSON.parse(row.spec),
+      hash: row.hash,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastSyncedAt: row.last_synced_at
+    };
+  }
   close() {
     if (this.db) this.db.close();
   }
 };
 
 // src/server/routes/index.ts
-var import_crypto3 = __toESM(require("crypto"), 1);
+var import_crypto6 = __toESM(require("crypto"), 1);
 var import_http = __toESM(require("http"), 1);
 
 // src/server/mock/version-manager.ts
-var import_crypto2 = __toESM(require("crypto"), 1);
+var import_crypto5 = __toESM(require("crypto"), 1);
 var VersionManager = class {
   database;
   maxVersions = 10;
@@ -1066,7 +2151,7 @@ var VersionManager = class {
     const versions = await this.database.getMockVersions(mockId);
     const versionNumber = versions.length > 0 ? Math.max(...versions.map((v) => v.version)) + 1 : 1;
     const version = {
-      id: `ver_${import_crypto2.default.randomUUID()}`,
+      id: `ver_${import_crypto5.default.randomUUID()}`,
       mock_id: mockId,
       version: versionNumber,
       response,
@@ -1347,6 +2432,181 @@ var ImportExporter = class {
   }
 };
 
+// src/server/routes/contracts.ts
+function setupContractRoutes(app, contractManager, database) {
+  app.get("/api/contracts", async (req, res) => {
+    try {
+      const contracts = await contractManager.findAll();
+      res.json(contracts);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.get("/api/contracts/:id", async (req, res) => {
+    try {
+      const contract = await contractManager.findById(req.params.id);
+      if (!contract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      res.json(contract);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.post("/api/contracts", async (req, res) => {
+    try {
+      const { name, sourceType, sourceUrl, spec } = req.body;
+      if (!name || !spec) {
+        return res.status(400).json({ error: "name and spec are required" });
+      }
+      const contract = await contractManager.create({
+        name,
+        sourceType: sourceType || "file",
+        sourceUrl,
+        spec
+      });
+      res.status(201).json(contract);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+  app.delete("/api/contracts/:id", async (req, res) => {
+    try {
+      const deleted = await contractManager.delete(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.post("/api/contracts/discover", async (req, res) => {
+    try {
+      const { projectPath, backendUrl } = req.body;
+      const contracts = await contractManager.discover({
+        projectPath,
+        backendUrl
+      });
+      res.json({
+        total: contracts.length,
+        contracts
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.post("/api/contracts/:id/sync", async (req, res) => {
+    try {
+      const contract = await contractManager.sync(req.params.id);
+      if (!contract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      res.json(contract);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.get("/api/contracts/:id/mocks", async (req, res) => {
+    try {
+      const { endpoint, method } = req.query;
+      const mocks = contractManager.generateMocks(
+        req.params.id,
+        endpoint,
+        method
+      );
+      res.json({
+        contractId: req.params.id,
+        total: mocks.length,
+        mocks
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.post("/api/contracts/:id/mocks/generate", async (req, res) => {
+    try {
+      const { endpoint, method } = req.body;
+      const mocks = contractManager.generateMocks(
+        req.params.id,
+        endpoint,
+        method
+      );
+      if (mocks.length === 0) {
+        return res.status(404).json({ error: "No matching endpoint found" });
+      }
+      res.json(mocks[0]);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.get("/api/contracts/:id/types", async (req, res) => {
+    try {
+      const result = contractManager.generateTypes(req.params.id);
+      res.json({
+        contractId: result.contractId,
+        types: result.types,
+        interfaces: result.interfaces,
+        filePath: result.filePath,
+        generatedAt: result.generatedAt
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.post("/api/contracts/:id/types/download", async (req, res) => {
+    try {
+      const result = contractManager.generateTypes(req.params.id);
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="api-types.ts"`);
+      res.send(result.types);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.post("/api/contracts/:id/validate", async (req, res) => {
+    try {
+      const { frontendPath } = req.body;
+      if (!frontendPath) {
+        return res.status(400).json({ error: "frontendPath is required" });
+      }
+      res.json({
+        contractId: req.params.id,
+        status: "pending",
+        message: "Validation started"
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.get("/api/contracts/:id/history", async (req, res) => {
+    try {
+      res.json({
+        contractId: req.params.id,
+        versions: []
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app.get("/api/contracts/:id/diff", async (req, res) => {
+    try {
+      const { version1, version2 } = req.query;
+      const diff = contractManager.diff(
+        req.params.id,
+        parseInt(version1, 10),
+        parseInt(version2, 10)
+      );
+      if (!diff) {
+        return res.status(404).json({ error: "Could not compute diff" });
+      }
+      res.json(diff);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+}
+
 // src/server/routes/index.ts
 var import_picocolors3 = __toESM(require("picocolors"), 1);
 var globalWss = null;
@@ -1365,7 +2625,7 @@ function broadcastRequest(method, path2, status, duration) {
     }
   });
 }
-function setupRoutes(app, mockManager, database, config, claudeClient2) {
+function setupRoutes(app, mockManager, database, config, claudeClient2, contractManager) {
   const versionManager = new VersionManager(database);
   const importer = new ImportExporter();
   app.get("/health", (req, res) => {
@@ -1752,6 +3012,9 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
       res.status(500).json({ error: error.message });
     }
   });
+  if (contractManager) {
+    setupContractRoutes(app, contractManager, database);
+  }
   app.all("*", async (req, res) => {
     const startTime = Date.now();
     const mock = mockManager.findMatchingMock(req.method, req.path);
@@ -1771,7 +3034,7 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
       }
       const duration = Date.now() - startTime;
       await database.saveRequestLog({
-        id: `req_${import_crypto3.default.randomUUID()}`,
+        id: `req_${import_crypto6.default.randomUUID()}`,
         method: req.method,
         path: req.path,
         query: req.query,
@@ -1825,7 +3088,7 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
       return;
     }
     await database.saveRequestLog({
-      id: `req_${import_crypto3.default.randomUUID()}`,
+      id: `req_${import_crypto6.default.randomUUID()}`,
       method: req.method,
       path: req.path,
       query: req.query,
@@ -1848,12 +3111,12 @@ function setupRoutes(app, mockManager, database, config, claudeClient2) {
 
 // src/server/websocket/index.ts
 var import_ws = require("ws");
-var import_crypto4 = __toESM(require("crypto"), 1);
+var import_crypto7 = __toESM(require("crypto"), 1);
 var import_picocolors4 = __toESM(require("picocolors"), 1);
 function setupWebSocket(wss, mockManager, database) {
   const clients = /* @__PURE__ */ new Map();
   wss.on("connection", (ws) => {
-    const clientId = `client_${import_crypto4.default.randomUUID()}`;
+    const clientId = `client_${import_crypto7.default.randomUUID()}`;
     const client = {
       id: clientId,
       ws
@@ -1967,14 +3230,14 @@ function setupWebSocket(wss, mockManager, database) {
 // src/server/index.ts
 init_claude_client();
 var import_picocolors5 = __toESM(require("picocolors"), 1);
-var import_fs2 = __toESM(require("fs"), 1);
+var import_fs3 = __toESM(require("fs"), 1);
 var import_meta = {};
 function loadConfig() {
   const configPath = "./data/config.json";
   let envConfig = {};
-  if (import_fs2.default.existsSync(configPath)) {
+  if (import_fs3.default.existsSync(configPath)) {
     try {
-      envConfig = JSON.parse(import_fs2.default.readFileSync(configPath, "utf-8"));
+      envConfig = JSON.parse(import_fs3.default.readFileSync(configPath, "utf-8"));
     } catch (e) {
     }
   }
@@ -1994,6 +3257,7 @@ var MockServer = class {
   server;
   wss;
   mockManager;
+  contractManager;
   database;
   claudeClient;
   config;
@@ -2008,6 +3272,7 @@ var MockServer = class {
     this.wss = new import_ws2.WebSocketServer({ server: this.server, path: "/ws" });
     this.database = new Database(this.config.dbPath);
     this.mockManager = new MockManager(this.database);
+    this.contractManager = new ContractManager(this.database);
     this.claudeClient = getClaudeClient({
       apiKey: this.config.claudeApiKey,
       baseURL: this.config.baseUrl,
@@ -2033,7 +3298,7 @@ var MockServer = class {
     });
   }
   setupRoutes() {
-    setupRoutes(this.app, this.mockManager, this.database, this.config, this.claudeClient);
+    setupRoutes(this.app, this.mockManager, this.database, this.config, this.claudeClient, this.contractManager);
   }
   setupWebSocket() {
     setupWebSocket(this.wss, this.mockManager, this.database);

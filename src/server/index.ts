@@ -6,7 +6,6 @@ import { MockManager } from './mock/manager.js'
 import { ContractManager } from './contract/manager.js'
 import { Database } from './storage/database.js'
 import { setupRoutes, setWebSocketServer } from './routes/index.js'
-import { setupContractRoutes } from './routes/contracts.js'
 import { setupWebSocket } from './websocket/index.js'
 import { ClaudeClient, getClaudeClient } from './llm/claude-client.js'
 import pc from 'picocolors'
@@ -102,8 +101,7 @@ export class MockServer {
   }
 
   private setupRoutes() {
-    setupRoutes(this.app, this.mockManager, this.database, this.config, this.claudeClient)
-    setupContractRoutes(this.app, this.contractManager, this.database)
+    setupRoutes(this.app, this.mockManager, this.database, this.config, this.claudeClient, this.contractManager)
   }
 
   private setupWebSocket() {
