@@ -3,8 +3,10 @@ import cors from 'cors'
 import { createServer } from 'http'
 import { WebSocketServer } from 'ws'
 import { MockManager } from './mock/manager.js'
+import { ContractManager } from './contract/manager.js'
 import { Database } from './storage/database.js'
 import { setupRoutes, setWebSocketServer } from './routes/index.js'
+import { setupContractRoutes } from './routes/contracts.js'
 import { setupWebSocket } from './websocket/index.js'
 import { ClaudeClient, getClaudeClient } from './llm/claude-client.js'
 import pc from 'picocolors'
@@ -52,6 +54,7 @@ export class MockServer {
   private server: ReturnType<typeof createServer>
   private wss: WebSocketServer
   private mockManager: MockManager
+  private contractManager: ContractManager
   private database: Database
   private claudeClient: ClaudeClient
   private config: ServerConfig
@@ -68,6 +71,7 @@ export class MockServer {
     this.wss = new WebSocketServer({ server: this.server, path: '/ws' })
     this.database = new Database(this.config.dbPath!)
     this.mockManager = new MockManager(this.database)
+    this.contractManager = new ContractManager(this.database)
     this.claudeClient = getClaudeClient({
       apiKey: this.config.claudeApiKey,
       baseURL: this.config.baseUrl,
@@ -99,6 +103,7 @@ export class MockServer {
 
   private setupRoutes() {
     setupRoutes(this.app, this.mockManager, this.database, this.config, this.claudeClient)
+    setupContractRoutes(this.app, this.contractManager, this.database)
   }
 
   private setupWebSocket() {

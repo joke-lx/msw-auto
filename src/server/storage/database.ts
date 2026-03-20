@@ -2,11 +2,13 @@ import fs from 'fs'
 import path from 'path'
 import type { Mock } from '../mock/manager.js'
 import type { MockVersion } from '../mock/version-manager.js'
+import type { Contract } from '../types/index.js'
 
 // 内存存储 - 充当 SQLite 的后备
 class InMemoryStorage {
   private mocks: Map<string, Mock> = new Map()
   private versions: Map<string, MockVersion[]> = new Map()
+  private contracts: Map<string, Contract> = new Map()
   private requestLogs: any[] = []
 
   // Mock 操作
@@ -65,6 +67,25 @@ class InMemoryStorage {
 
   async getRecentRequests(limit: number): Promise<any[]> {
     return this.requestLogs.slice(0, limit)
+  }
+
+  // Contract operations
+  async getAllContracts(): Promise<Contract[]> {
+    return Array.from(this.contracts.values()).sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  }
+
+  async getContractById(id: string): Promise<Contract | null> {
+    return this.contracts.get(id) || null
+  }
+
+  async saveContract(contract: Contract): Promise<void> {
+    this.contracts.set(contract.id, contract)
+  }
+
+  async deleteContract(id: string): Promise<void> {
+    this.contracts.delete(id)
   }
 }
 
@@ -146,10 +167,25 @@ export class Database {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS contracts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_url TEXT,
+        version TEXT NOT NULL,
+        spec TEXT NOT NULL,
+        hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_synced_at TEXT
+      );
+
       CREATE INDEX IF NOT EXISTS idx_mocks_method_path ON mocks(method, path);
       CREATE INDEX IF NOT EXISTS idx_mocks_enabled ON mocks(enabled);
       CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp ON request_logs(timestamp DESC);
       CREATE INDEX IF NOT EXISTS idx_mock_versions_mock_id ON mock_versions(mock_id, version DESC);
+      CREATE INDEX IF NOT EXISTS idx_contracts_created_at ON contracts(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_contracts_hash ON contracts(hash);
     `)
   }
 
@@ -309,6 +345,65 @@ export class Database {
     } catch { return [] }
   }
 
+  // ============ Contract Operations ============
+
+  async getAllContracts(): Promise<Contract[]> {
+    if (this.useMemory) return this.memory.getAllContracts()
+    try {
+      const rows = this.db.prepare('SELECT * FROM contracts ORDER BY created_at DESC').all()
+      return rows.map(this.mapRowToContract)
+    } catch { return [] }
+  }
+
+  async getContractById(id: string): Promise<Contract | null> {
+    if (this.useMemory) return this.memory.getContractById(id)
+    try {
+      const row = this.db.prepare('SELECT * FROM contracts WHERE id = ?').get(id)
+      return row ? this.mapRowToContract(row) : null
+    } catch { return null }
+  }
+
+  async saveContract(contract: Contract): Promise<void> {
+    if (this.useMemory) return this.memory.saveContract(contract)
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO contracts (id, name, source_type, source_url, version, spec, hash, created_at, updated_at, last_synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      stmt.run(
+        contract.id, contract.name, contract.sourceType, contract.sourceUrl || null,
+        contract.version, JSON.stringify(contract.spec), contract.hash,
+        contract.createdAt, contract.updatedAt, contract.lastSyncedAt || null
+      )
+    } catch {}
+  }
+
+  async updateContract(contract: Contract): Promise<void> {
+    if (this.useMemory) {
+      this.memory.saveContract(contract)
+      return
+    }
+    try {
+      const stmt = this.db.prepare(`
+        UPDATE contracts SET name = ?, source_type = ?, source_url = ?, version = ?, spec = ?,
+          hash = ?, updated_at = ?, last_synced_at = ?
+          WHERE id = ?
+      `)
+      stmt.run(
+        contract.name, contract.sourceType, contract.sourceUrl || null,
+        contract.version, JSON.stringify(contract.spec), contract.hash,
+        contract.updatedAt, contract.lastSyncedAt || null, contract.id
+      )
+    } catch {}
+  }
+
+  async deleteContract(id: string): Promise<void> {
+    if (this.useMemory) return this.memory.deleteContract(id)
+    try {
+      this.db.prepare('DELETE FROM contracts WHERE id = ?').run(id)
+    } catch {}
+  }
+
   // ============ Helpers ============
 
   private mapRowToMock(row: any): Mock {
@@ -321,6 +416,16 @@ export class Database {
       description: row.description,
       tags: row.tags ? row.tags.split(',') : [],
       version: row.version, created_at: row.created_at, updated_at: row.updated_at
+    }
+  }
+
+  private mapRowToContract(row: any): Contract {
+    return {
+      id: row.id, name: row.name, sourceType: row.source_type,
+      sourceUrl: row.source_url, version: row.version,
+      spec: JSON.parse(row.spec), hash: row.hash,
+      createdAt: row.created_at, updatedAt: row.updated_at,
+      lastSyncedAt: row.last_synced_at
     }
   }
 
