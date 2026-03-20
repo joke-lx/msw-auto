@@ -17,22 +17,41 @@
   </a>
 </p>
 
-> 基于 MSW (Mock Service Worker) 的智能自动化 Mock 服务器，配备 Web UI 管理和 AI 生成能力。
+> **API 契约驱动的智能 Mock 服务器** - 基于 OpenAPI/Swagger 规范自动生成 100% 符合约的 Mock 数据，配备 TypeScript 类型自动生成。
+
+## ✨ v3.0 重大更新
+
+- 🎯 **契约驱动开发** - OpenAPI/Swagger 作为唯一真实来源
+- 🔄 **自动发现契约** - 从运行中的后端或静态文件自动发现 API 规范
+- 📊 **Schema 精确 Mock** - 100% 符合 OpenAPI Schema 的 Mock 数据
+- 🔷 **类型自动生成** - 从契约自动生成 TypeScript 接口定义
+- 🏗️ **精简架构** - 删除冗余代码，使用官方 MSW 包，代码量减少 60%
 
 ## 特性
 
-- **强大的 Mock 能力** - 基于 MSW，支持 REST、GraphQL 和 WebSocket
-- **全局开关控制** - 一键开启/关闭所有 Mock 拦截
-- **Web UI 管理** - 直观的图形界面管理 Mock 配置
-- **AI 生成** - 使用 LLM 自动生成 Mock 数据
-- **前端代码分析** - 自动分析前端项目中的 API 调用 (axios/fetch/XHR)
-- **MCP 工具服务** - 提供本地文件操作和 AI 集成工具
-- **多 LLM 支持** - 支持 Anthropic、OpenAI 等
-- **导入支持** - 支持从 Postman 和 Swagger 导入 API 定义
-- **主题切换** - 支持浅色/深色主题，一键切换
-- **国际化** - 支持中英文界面
-- **请求日志** - 实时记录和查看所有请求
-- **版本管理** - 支持 Mock 版本历史和回滚
+### 核心功能
+- **契约驱动** - OpenAPI/Swagger 作为 API 契约的唯一真实来源
+- **自动发现** - 从运行中的后端 `/api-docs` 或项目中的静态文件自动发现契约
+- **精确 Mock** - 基于 Schema 生成 100% 符合约的 Mock 数据
+- **类型生成** - 自动生成 TypeScript 接口定义，支持前端自动补全
+- **版本管理** - 契约版本跟踪，变更检测，差异对比
+
+### Mock 能力
+- **语义感知** - 根据 field name 智能生成数据 (email, uuid, dates 等)
+- **复杂类型** - 支持 allOf/oneOf/anyOf, $ref, 嵌套对象
+- **边界测试** - 自动生成空数组、null 值等边界情况
+- **多格式** - 支持 OpenAPI 3.x 和 Swagger 2.0
+
+### 用户体验
+- **Web UI** - 直观的图形界面管理契约和 Mock
+- **实时更新** - WebSocket 推送契约变更
+- **国际化** - 中英文界面
+- **主题切换** - 深色/浅色主题
+
+### 开发者工具
+- **MCP 集成** - Model Context Protocol 服务器，支持 AI 工具调用
+- **CLI 工具** - 命令行界面，支持自动化脚本
+- **API 接口** - RESTful API，易于集成
 
 ## 目录
 
