@@ -3,13 +3,12 @@ import { Layout, Menu, Button, Dropdown, theme } from 'antd'
 import {
   DashboardOutlined,
   ApiOutlined,
+  FileTextOutlined,
   CodeOutlined,
   SettingOutlined,
-  FileTextOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   GlobalOutlined,
-  BulbOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -40,6 +39,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       key: '/explorer',
       icon: <ApiOutlined />,
       label: t('nav.explorer'),
+    },
+    {
+      key: '/contracts',
+      icon: <FileTextOutlined />,
+      label: t('nav.contracts'),
     },
     {
       key: '/mocks',
