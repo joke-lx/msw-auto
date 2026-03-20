@@ -1,0 +1,6 @@
+{
+  "provider": "anthropic",
+  "apiKey": "58c0907b77a24536a462ac6ae3305f7b.2msogc9kmDCoTdQn",
+  "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+  "model": "claude-3-5-sonnet-20241022"
+}
