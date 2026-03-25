@@ -27,6 +27,8 @@ export interface CreateContractDto {
 export interface DiscoverOptions {
   projectPath?: string
   backendUrl?: string
+  port?: number
+  swaggerPath?: string
 }
 
 export class ContractManager {
@@ -145,6 +147,8 @@ export class ContractManager {
     const sources: OpenAPISource[] = await this.discovery.discover({
       projectPath: options.projectPath || process.cwd(),
       backendUrl: options.backendUrl,
+      port: options.port,
+      swaggerPath: options.swaggerPath,
     })
 
     const contracts: Contract[] = []

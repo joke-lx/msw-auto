@@ -71,6 +71,10 @@
     "notFound": "Contract not found",
     "backendUrl": "Backend URL",
     "backendUrlTooltip": "The base URL of your running backend API (e.g., https://api.example.com)",
+    "port": "Backend Port",
+    "portTooltip": "The port number of your running backend API (e.g., 3000). If specified, only this port will be checked.",
+    "swaggerPath": "Swagger Path",
+    "swaggerPathTooltip": "Custom path to your OpenAPI/Swagger documentation (e.g., /api-docs). If not specified, common endpoints will be tried.",
     "projectPath": "Project Path",
     "projectPathTooltip": "Local path to your project directory containing OpenAPI/Swagger files",
     "total": "Total {{count}} items"

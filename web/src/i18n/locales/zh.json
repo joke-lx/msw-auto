@@ -71,6 +71,10 @@
     "notFound": "契约未找到",
     "backendUrl": "后端 URL",
     "backendUrlTooltip": "运行中的后端 API 基础 URL（例如：https://api.example.com）",
+    "port": "后端端口",
+    "portTooltip": "后端服务端口号（如：3000）。指定后将只检测该端口。",
+    "swaggerPath": "Swagger 路径",
+    "swaggerPathTooltip": "OpenAPI/Swagger 文档的自定义路径（如：/api-docs）。不指定则尝试常见端点。",
     "projectPath": "项目路径",
     "projectPathTooltip": "包含 OpenAPI/Swagger 文件的项目本地路径",
     "total": "共 {{count}} 项"

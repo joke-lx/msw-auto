@@ -122,7 +122,7 @@ export const contractApi = {
   delete: (id: string) => apiClient.delete<any>(`/api/contracts/${id}`),
 
   // 发现契约
-  discover: (options: { projectPath?: string; backendUrl?: string }) =>
+  discover: (options: { projectPath?: string; backendUrl?: string; port?: number; swaggerPath?: string }) =>
     apiClient.post<any>('/api/contracts/discover', options),
 
   // 同步契约

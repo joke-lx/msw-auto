@@ -10,6 +10,8 @@ import type { OpenAPISource, OpenAPISpec, SpecVersion } from '../types/index.js'
 export interface DiscoveryOptions {
   projectPath: string
   backendUrl?: string
+  port?: number
+  swaggerPath?: string
   timeout?: number
 }
 
@@ -63,12 +65,46 @@ export class OpenAPIDiscovery {
    */
   private async checkLiveEndpoints(options: DiscoveryOptions): Promise<OpenAPISource[]> {
     const sources: OpenAPISource[] = []
-    const serverUrl = options.backendUrl || await this.detectBackendUrl(options.projectPath)
+    const serverUrl = options.backendUrl || await this.detectBackendUrl(options.projectPath, options.port)
 
     if (!serverUrl) {
       return sources
     }
 
+    // 如果提供了自定义 swaggerPath，直接使用它
+    if (options.swaggerPath) {
+      try {
+        const response = await fetch(`${serverUrl}${options.swaggerPath}`, {
+          signal: AbortSignal.timeout(options.timeout || 5000),
+          headers: {
+            'Accept': 'application/json,application/swagger+json,application/vnd.oai.openapi',
+          },
+        })
+
+        if (response.ok) {
+          const spec = await response.json()
+          const version = this.detectVersion(spec)
+
+          if (version !== 'unknown') {
+            sources.push({
+              type: version,
+              source: 'live',
+              url: `${serverUrl}${options.swaggerPath}`,
+              spec,
+              timestamp: new Date().toISOString(),
+              hash: this.generateHash(spec),
+            })
+
+            console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${options.swaggerPath}`)
+            return sources
+          }
+        }
+      } catch {
+        // 自定义路径失败后，尝试 fallback 到 commonEndpoints
+      }
+    }
+
+    // 默认：遍历 commonEndpoints
     for (const endpoint of this.commonEndpoints) {
       try {
         const response = await fetch(`${serverUrl}${endpoint}`, {
@@ -197,14 +233,17 @@ export class OpenAPIDiscovery {
   /**
    * 检测后端 URL
    */
-  private async detectBackendUrl(projectPath: string): Promise<string | null> {
-    const defaultUrls = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:8000',
-      'http://localhost:8080',
-      'http://127.0.0.1:3000',
-    ]
+  private async detectBackendUrl(projectPath: string, port?: number): Promise<string | null> {
+    // 如果指定了端口，只检测该端口
+    const defaultUrls = port
+      ? [`http://localhost:${port}`, `http://127.0.0.1:${port}`]
+      : [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://localhost:8000',
+          'http://localhost:8080',
+          'http://127.0.0.1:3000',
+        ]
 
     // 优先检查 package.json 配置
     const packageJsonPath = join(projectPath, 'package.json')

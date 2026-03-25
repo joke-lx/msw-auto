@@ -22,7 +22,7 @@ interface ContractState {
   fetchContractById: (id: string) => Promise<Contract | null>
   createContract: (data: any) => Promise<Contract>
   deleteContract: (id: string) => Promise<void>
-  discoverContracts: (options: { projectPath?: string; backendUrl?: string }) => Promise<Contract[]>
+  discoverContracts: (options: { projectPath?: string; backendUrl?: string; port?: number; swaggerPath?: string }) => Promise<Contract[]>
   syncContract: (id: string) => Promise<Contract | null>
 
   // 选择契约

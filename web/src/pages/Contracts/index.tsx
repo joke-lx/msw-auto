@@ -347,6 +347,27 @@ const Contracts = () => {
             />
           </Form.Item>
           <Form.Item
+            name="port"
+            label={t('contracts.port')}
+            tooltip={t('contracts.portTooltip')}
+          >
+            <Input
+              placeholder="3000"
+              type="number"
+              prefix={<CodeOutlined />}
+            />
+          </Form.Item>
+          <Form.Item
+            name="swaggerPath"
+            label={t('contracts.swaggerPath')}
+            tooltip={t('contracts.swaggerPathTooltip')}
+          >
+            <Input
+              placeholder="/api-docs"
+              prefix={<FileTextOutlined />}
+            />
+          </Form.Item>
+          <Form.Item
             name="projectPath"
             label={t('contracts.projectPath')}
             tooltip={t('contracts.projectPathTooltip')}

@@ -91,11 +91,13 @@ export function setupContractRoutes(
    */
   app.post('/api/contracts/discover', async (req, res) => {
     try {
-      const { projectPath, backendUrl } = req.body
+      const { projectPath, backendUrl, port, swaggerPath } = req.body
 
       const contracts = await contractManager.discover({
         projectPath,
         backendUrl,
+        port,
+        swaggerPath,
       })
 
       res.json({
