@@ -65,7 +65,23 @@ export class OpenAPIDiscovery {
    */
   private async checkLiveEndpoints(options: DiscoveryOptions): Promise<OpenAPISource[]> {
     const sources: OpenAPISource[] = []
-    const serverUrl = options.backendUrl || await this.detectBackendUrl(options.projectPath, options.port)
+    let serverUrl: string
+
+    if (options.backendUrl) {
+      // Parse the URL and rebuild with the provided port
+      try {
+        const url = new URL(options.backendUrl)
+        if (options.port) {
+          url.port = String(options.port)
+        }
+        serverUrl = url.origin
+      } catch {
+        // If URL parsing fails, fall back to simple string manipulation
+        serverUrl = `${options.backendUrl.replace(/\/$/, '')}:${options.port || 80}`
+      }
+    } else {
+      serverUrl = await this.detectBackendUrl(options.projectPath, options.port)
+    }
 
     if (!serverUrl) {
       return sources
@@ -82,21 +98,65 @@ export class OpenAPIDiscovery {
         })
 
         if (response.ok) {
-          const spec = await response.json()
-          const version = this.detectVersion(spec)
+          const contentType = response.headers.get('content-type') || ''
+          const text = await response.text()
 
-          if (version !== 'unknown') {
-            sources.push({
-              type: version,
-              source: 'live',
-              url: `${serverUrl}${options.swaggerPath}`,
-              spec,
-              timestamp: new Date().toISOString(),
-              hash: this.generateHash(spec),
-            })
-
-            console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${options.swaggerPath}`)
-            return sources
+          // HTML 页面需要额外处理
+          if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+            // 尝试从 swagger-ui-init.js 提取
+            const specFromInit = await this.extractSpecFromSwaggerInit(serverUrl, options.swaggerPath)
+            if (specFromInit) {
+              const version = this.detectVersion(specFromInit)
+              if (version !== 'unknown') {
+                sources.push({
+                  type: version,
+                  source: 'live',
+                  url: `${serverUrl}${options.swaggerPath}`,
+                  spec: specFromInit,
+                  timestamp: new Date().toISOString(),
+                  hash: this.generateHash(specFromInit),
+                })
+                console.log(`✅ Found OpenAPI ${version} from swagger-ui-init.js`)
+                return sources
+              }
+            }
+            // 尝试从 HTML 直接提取
+            const specFromHtml = this.extractSwaggerDocFromHtml(text)
+            if (specFromHtml) {
+              const version = this.detectVersion(specFromHtml)
+              if (version !== 'unknown') {
+                sources.push({
+                  type: version,
+                  source: 'live',
+                  url: `${serverUrl}${options.swaggerPath}`,
+                  spec: specFromHtml,
+                  timestamp: new Date().toISOString(),
+                  hash: this.generateHash(specFromHtml),
+                })
+                console.log(`✅ Found OpenAPI ${version} from HTML at: ${serverUrl}${options.swaggerPath}`)
+                return sources
+              }
+            }
+          } else {
+            // JSON 响应
+            try {
+              const spec = JSON.parse(text)
+              const version = this.detectVersion(spec)
+              if (version !== 'unknown') {
+                sources.push({
+                  type: version,
+                  source: 'live',
+                  url: `${serverUrl}${options.swaggerPath}`,
+                  spec,
+                  timestamp: new Date().toISOString(),
+                  hash: this.generateHash(spec),
+                })
+                console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${options.swaggerPath}`)
+                return sources
+              }
+            } catch {
+              // 忽略
+            }
           }
         }
       } catch {
@@ -115,21 +175,68 @@ export class OpenAPIDiscovery {
         })
 
         if (response.ok) {
-          const spec = await response.json()
-          const version = this.detectVersion(spec)
+          const contentType = response.headers.get('content-type') || ''
+          const text = await response.text()
 
-          if (version !== 'unknown') {
-            sources.push({
-              type: version,
-              source: 'live',
-              url: `${serverUrl}${endpoint}`,
-              spec,
-              timestamp: new Date().toISOString(),
-              hash: this.generateHash(spec),
-            })
+          // 如果返回的是 HTML，尝试从中提取 swaggerDoc
+          if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+            // 先尝试从 swagger-ui-init.js 提取
+            const specFromInit = await this.extractSpecFromSwaggerInit(serverUrl, endpoint)
+            if (specFromInit) {
+              const version = this.detectVersion(specFromInit)
+              if (version !== 'unknown') {
+                sources.push({
+                  type: version,
+                  source: 'live',
+                  url: `${serverUrl}${endpoint}`,
+                  spec: specFromInit,
+                  timestamp: new Date().toISOString(),
+                  hash: this.generateHash(specFromInit),
+                })
+                console.log(`✅ Found OpenAPI ${version} from swagger-ui-init.js`)
+                return sources
+              }
+            }
 
-            console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${endpoint}`)
-            break // 找到一个就停止
+            const specFromHtml = this.extractSwaggerDocFromHtml(text)
+            if (specFromHtml) {
+              const version = this.detectVersion(specFromHtml)
+              if (version !== 'unknown') {
+                sources.push({
+                  type: version,
+                  source: 'live',
+                  url: `${serverUrl}${endpoint}`,
+                  spec: specFromHtml,
+                  timestamp: new Date().toISOString(),
+                  hash: this.generateHash(specFromHtml),
+                })
+                console.log(`✅ Found OpenAPI ${version} from HTML at: ${serverUrl}${endpoint}`)
+                return sources
+              }
+            }
+            continue
+          }
+
+          // 尝试解析为 JSON
+          try {
+            const spec = JSON.parse(text)
+            const version = this.detectVersion(spec)
+
+            if (version !== 'unknown') {
+              sources.push({
+                type: version,
+                source: 'live',
+                url: `${serverUrl}${endpoint}`,
+                spec,
+                timestamp: new Date().toISOString(),
+                hash: this.generateHash(spec),
+              })
+
+              console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${endpoint}`)
+              break // 找到一个就停止
+            }
+          } catch {
+            continue
           }
         }
       } catch {
@@ -139,6 +246,26 @@ export class OpenAPIDiscovery {
     }
 
     return sources
+  }
+
+  /**
+   * 从 swagger-ui-init.js 提取 spec
+   */
+  private async extractSpecFromSwaggerInit(baseUrl: string, swaggerPath: string): Promise<OpenAPISpec | null> {
+    // 构建 swagger-ui-init.js 的 URL
+    const initUrl = `${baseUrl}${swaggerPath.replace(/\/$/, '')}/swagger-ui-init.js`
+    try {
+      const response = await fetch(initUrl, {
+        signal: AbortSignal.timeout(5000),
+      })
+      if (response.ok) {
+        const text = await response.text()
+        return this.extractSwaggerDocFromHtml(text)
+      }
+    } catch {
+      // 忽略
+    }
+    return null
   }
 
   /**
@@ -314,6 +441,83 @@ export class OpenAPIDiscovery {
       // TODO: 支持 YAML 解析
       return null
     }
+  }
+
+  /**
+   * 从 HTML 页面中提取 swaggerDoc 对象
+   */
+  private extractSwaggerDocFromHtml(html: string): OpenAPISpec | null {
+    // 策略1: 查找 var options = { "swaggerDoc": { ... } } 形式
+    // 这种格式的 swagger-ui-init.js 使用 var options 包裹
+    const optionsMatch = html.match(/var\s+options\s*=\s*(\{[\s\S]*?\})\s*;/)
+    if (optionsMatch && optionsMatch[1]) {
+      try {
+        const optionsObj = JSON.parse(optionsMatch[1])
+        if (optionsObj.swaggerDoc && (optionsObj.swaggerDoc.openapi || optionsObj.swaggerDoc.swagger)) {
+          return optionsObj.swaggerDoc
+        }
+      } catch {
+        // 忽略
+      }
+    }
+
+    // 策略2: 查找 window.swaggerDoc = { ... }
+    const windowMatch = html.match(/window\.swaggerDoc\s*=\s*\{([\s\S]*?)\}\s*;/)
+    if (windowMatch && windowMatch[1]) {
+      try {
+        const spec = JSON.parse('{' + windowMatch[1] + '}')
+        if (spec && (spec.openapi || spec.swagger)) {
+          return spec
+        }
+      } catch {
+        // 忽略
+      }
+    }
+
+    // 策略3: 使用括号计数法提取 "swaggerDoc": { ... }
+    const swaggerDocIndex = html.indexOf('"swaggerDoc"')
+    if (swaggerDocIndex === -1) {
+      return null
+    }
+
+    // 找到 "swaggerDoc" 后面的 { 位置
+    let braceStart = -1
+    for (let i = swaggerDocIndex; i < html.length; i++) {
+      if (html[i] === ':') {
+        // 跳过冒号后的空白
+        let j = i + 1
+        while (j < html.length && (html[j] === ' ' || html[j] === '\t' || html[j] === '\n')) j++
+        if (html[j] === '{') {
+          braceStart = j
+          break
+        }
+      }
+    }
+
+    if (braceStart === -1) return null
+
+    // 括号计数找到匹配的 }
+    let braceCount = 1
+    let endPos = braceStart + 1
+    while (endPos < html.length && braceCount > 0) {
+      if (html[endPos] === '{') braceCount++
+      else if (html[endPos] === '}') braceCount--
+      endPos++
+    }
+
+    if (braceCount !== 0) return null
+
+    const swaggerDocJson = html.substring(braceStart, endPos)
+    try {
+      const spec = JSON.parse(swaggerDocJson)
+      if (spec && (spec.openapi || spec.swagger)) {
+        return spec
+      }
+    } catch {
+      // 忽略
+    }
+
+    return null
   }
 
   /**

@@ -68,7 +68,7 @@ export const useContractStore = create<ContractState>()(
         set({ loading: true, error: null })
         try {
           const contract = await contractApi.getById(id)
-          set({ loading: false })
+          set({ selectedContract: contract, loading: false })
           return contract
         } catch (error) {
           set({
