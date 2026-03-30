@@ -155,8 +155,9 @@ export const contractApi = {
  * 请求日志 API
  */
 export const logApi = {
-  getRecent: (limit = 100) => apiClient.get<any[]>(`/api/logs?limit=${limit}`),
-  clear: () => apiClient.delete<any>('/api/logs'),
+  getRecent: (limit = 100) => apiClient.get<any[]>(`/api/requests?limit=${limit}`),
+  clear: () => apiClient.delete<any>('/api/requests'),
+  deleteSelected: (ids: string[]) => apiClient.post<any>('/api/requests/delete', { ids }),
 }
 
 /**

@@ -7,6 +7,12 @@ import { join } from 'path'
 import crypto from 'crypto'
 import type { OpenAPISource, OpenAPISpec, SpecVersion } from '../types/index.js'
 
+// 正则表达式匹配 HTML 中的 OpenAPI URL
+const SWAGGER_LINK_REGEX = /<link[^>]*rel=["']api正式文档["'][^>]*href=["']([^"']+)["'][^>]*>/i
+const SWAGGER_LINK_REGEX_ALT = /<link[^>]*href=["']([^"']+)["'][^>]*rel=["']api正式文档["'][^>]*>/i
+const SWAGGER_URL_REGEX = /url\s*:\s*["']([^"']+)["']/
+const SWAGGER_UIBUNDLE_REGEX = /SwaggerUIBundle\(\s*\{[^}]*url\s*:\s*["']([^"']+)["']/
+
 export interface DiscoveryOptions {
   projectPath: string
   backendUrl?: string
@@ -65,19 +71,20 @@ export class OpenAPIDiscovery {
    */
   private async checkLiveEndpoints(options: DiscoveryOptions): Promise<OpenAPISource[]> {
     const sources: OpenAPISource[] = []
-    let serverUrl: string
 
+    // 构建 serverUrl：优先使用 backendUrl，如果提供了 port 则合并
+    let serverUrl: string | null = null
     if (options.backendUrl) {
-      // Parse the URL and rebuild with the provided port
+      // 如果 backendUrl 不包含端口且提供了 port，则合并
       try {
         const url = new URL(options.backendUrl)
-        if (options.port) {
-          url.port = String(options.port)
+        if (!url.port && options.port) {
+          url.port = options.port.toString()
         }
-        serverUrl = url.origin
+        serverUrl = `${url.protocol}//${url.host}`
       } catch {
-        // If URL parsing fails, fall back to simple string manipulation
-        serverUrl = `${options.backendUrl.replace(/\/$/, '')}:${options.port || 80}`
+        // backendUrl 不是有效 URL，使用它作为基础
+        serverUrl = options.backendUrl
       }
     } else {
       serverUrl = await this.detectBackendUrl(options.projectPath, options.port)
@@ -90,7 +97,40 @@ export class OpenAPIDiscovery {
     // 如果提供了自定义 swaggerPath，直接使用它
     if (options.swaggerPath) {
       try {
-        const response = await fetch(`${serverUrl}${options.swaggerPath}`, {
+        // 处理尾部斜杠：如果 swaggerPath 没有斜杠但服务器重定向有，则补充
+        let swaggerPath = options.swaggerPath
+        if (!swaggerPath.endsWith('/')) {
+          // 尝试带尾部斜杠的版本
+          const responseWithSlash = await fetch(`${serverUrl}${swaggerPath}/`, {
+            signal: AbortSignal.timeout(options.timeout || 5000),
+            headers: {
+              'Accept': 'application/json,application/swagger+json,application/vnd.oai.openapi',
+            },
+          })
+
+          if (responseWithSlash.ok) {
+            const contentType = responseWithSlash.headers.get('content-type') || ''
+            if (contentType.includes('json')) {
+              const spec = await responseWithSlash.json()
+              const version = this.detectVersion(spec)
+              if (version !== 'unknown') {
+                sources.push({
+                  type: version,
+                  source: 'live',
+                  url: `${serverUrl}${swaggerPath}/`,
+                  spec,
+                  timestamp: new Date().toISOString(),
+                  hash: this.generateHash(spec),
+                })
+                console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${swaggerPath}/`)
+                return sources
+              }
+            }
+          }
+        }
+
+        // 尝试不带尾部斜杠的版本
+        const response = await fetch(`${serverUrl}${swaggerPath}`, {
           signal: AbortSignal.timeout(options.timeout || 5000),
           headers: {
             'Accept': 'application/json,application/swagger+json,application/vnd.oai.openapi',
@@ -99,70 +139,81 @@ export class OpenAPIDiscovery {
 
         if (response.ok) {
           const contentType = response.headers.get('content-type') || ''
-          const text = await response.text()
 
-          // HTML 页面需要额外处理
-          if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-            // 尝试从 swagger-ui-init.js 提取
-            const specFromInit = await this.extractSpecFromSwaggerInit(serverUrl, options.swaggerPath)
-            if (specFromInit) {
-              const version = this.detectVersion(specFromInit)
-              if (version !== 'unknown') {
-                sources.push({
-                  type: version,
-                  source: 'live',
-                  url: `${serverUrl}${options.swaggerPath}`,
-                  spec: specFromInit,
-                  timestamp: new Date().toISOString(),
-                  hash: this.generateHash(specFromInit),
-                })
-                console.log(`✅ Found OpenAPI ${version} from swagger-ui-init.js`)
-                return sources
-              }
+          if (contentType.includes('json')) {
+            const spec = await response.json()
+            const version = this.detectVersion(spec)
+
+            if (version !== 'unknown') {
+              sources.push({
+                type: version,
+                source: 'live',
+                url: `${serverUrl}${swaggerPath}`,
+                spec,
+                timestamp: new Date().toISOString(),
+                hash: this.generateHash(spec),
+              })
+
+              console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${swaggerPath}`)
+              return sources
             }
-            // 尝试从 HTML 直接提取
-            const specFromHtml = this.extractSwaggerDocFromHtml(text)
-            if (specFromHtml) {
-              const version = this.detectVersion(specFromHtml)
-              if (version !== 'unknown') {
-                sources.push({
-                  type: version,
-                  source: 'live',
-                  url: `${serverUrl}${options.swaggerPath}`,
-                  spec: specFromHtml,
-                  timestamp: new Date().toISOString(),
-                  hash: this.generateHash(specFromHtml),
+          } else if (contentType.includes('html')) {
+            // HTML 页面，尝试解析其中的 OpenAPI URL 或内联规范
+            const html = await response.text()
+            const result = await this.extractOpenApiFromHtml(html, serverUrl)
+
+            if (result) {
+              let spec = result.spec
+              let url = result.url
+
+              // 如果 spec 为空，需要从 URL 获取
+              if (!spec) {
+                console.log(`🔍 Found OpenAPI URL in HTML: ${url}`)
+                const jsonResponse = await fetch(url, {
+                  signal: AbortSignal.timeout(options.timeout || 5000),
+                  headers: { 'Accept': 'application/json' },
                 })
-                console.log(`✅ Found OpenAPI ${version} from HTML at: ${serverUrl}${options.swaggerPath}`)
-                return sources
+
+                if (!jsonResponse.ok) {
+                  // 获取 JSON 失败，尝试 commonEndpoints
+                  // 不使用 continue，而是让代码继续到 commonEndpoints
+                } else {
+                  spec = await jsonResponse.json()
+                }
+              } else {
+                console.log(`🔍 Found inline OpenAPI spec in HTML from: ${url}`)
+              }
+
+              if (spec) {
+                const version = this.detectVersion(spec)
+
+                if (version !== 'unknown') {
+                  sources.push({
+                    type: version,
+                    source: 'live',
+                    url,
+                    spec,
+                    timestamp: new Date().toISOString(),
+                    hash: this.generateHash(spec),
+                  })
+
+                  console.log(`✅ Found OpenAPI ${version} at: ${url}`)
+                  return sources
+                }
               }
             }
           } else {
-            // JSON 响应
-            try {
-              const spec = JSON.parse(text)
-              const version = this.detectVersion(spec)
-              if (version !== 'unknown') {
-                sources.push({
-                  type: version,
-                  source: 'live',
-                  url: `${serverUrl}${options.swaggerPath}`,
-                  spec,
-                  timestamp: new Date().toISOString(),
-                  hash: this.generateHash(spec),
-                })
-                console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${options.swaggerPath}`)
-                return sources
-              }
-            } catch {
-              // 忽略
-            }
+            console.log(`⚠️  Unexpected content-type: ${contentType} from ${serverUrl}${swaggerPath}`)
           }
         }
-      } catch {
+      } catch (error) {
+        console.log(`❌ Failed to fetch from ${serverUrl}${options.swaggerPath}:`, error)
         // 自定义路径失败后，尝试 fallback 到 commonEndpoints
       }
     }
+
+    // 如果 swaggerPath 已经成功找到并返回，不会执行到这里
+    // 如果 swaggerPath 失败或未提供，使用 commonEndpoints
 
     // 默认：遍历 commonEndpoints
     for (const endpoint of this.commonEndpoints) {
@@ -176,50 +227,10 @@ export class OpenAPIDiscovery {
 
         if (response.ok) {
           const contentType = response.headers.get('content-type') || ''
-          const text = await response.text()
 
-          // 如果返回的是 HTML，尝试从中提取 swaggerDoc
-          if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-            // 先尝试从 swagger-ui-init.js 提取
-            const specFromInit = await this.extractSpecFromSwaggerInit(serverUrl, endpoint)
-            if (specFromInit) {
-              const version = this.detectVersion(specFromInit)
-              if (version !== 'unknown') {
-                sources.push({
-                  type: version,
-                  source: 'live',
-                  url: `${serverUrl}${endpoint}`,
-                  spec: specFromInit,
-                  timestamp: new Date().toISOString(),
-                  hash: this.generateHash(specFromInit),
-                })
-                console.log(`✅ Found OpenAPI ${version} from swagger-ui-init.js`)
-                return sources
-              }
-            }
-
-            const specFromHtml = this.extractSwaggerDocFromHtml(text)
-            if (specFromHtml) {
-              const version = this.detectVersion(specFromHtml)
-              if (version !== 'unknown') {
-                sources.push({
-                  type: version,
-                  source: 'live',
-                  url: `${serverUrl}${endpoint}`,
-                  spec: specFromHtml,
-                  timestamp: new Date().toISOString(),
-                  hash: this.generateHash(specFromHtml),
-                })
-                console.log(`✅ Found OpenAPI ${version} from HTML at: ${serverUrl}${endpoint}`)
-                return sources
-              }
-            }
-            continue
-          }
-
-          // 尝试解析为 JSON
-          try {
-            const spec = JSON.parse(text)
+          if (contentType.includes('json')) {
+            // 直接返回 JSON
+            const spec = await response.json()
             const version = this.detectVersion(spec)
 
             if (version !== 'unknown') {
@@ -233,10 +244,50 @@ export class OpenAPIDiscovery {
               })
 
               console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${endpoint}`)
-              break // 找到一个就停止
+              break
             }
-          } catch {
-            continue
+          } else if (contentType.includes('html')) {
+            // HTML 页面，尝试解析其中的 OpenAPI URL 或内联规范
+            const html = await response.text()
+            const result = await this.extractOpenApiFromHtml(html, serverUrl)
+
+            if (result) {
+              let spec = result.spec
+              let url = result.url
+
+              // 如果 spec 为空，需要从 URL 获取
+              if (!spec) {
+                console.log(`🔍 Found OpenAPI URL in HTML: ${url}`)
+                const jsonResponse = await fetch(url, {
+                  signal: AbortSignal.timeout(options.timeout || 5000),
+                  headers: { 'Accept': 'application/json' },
+                })
+
+                if (!jsonResponse.ok) {
+                  // 获取 JSON 失败，继续尝试下一个端点
+                  continue
+                }
+                spec = await jsonResponse.json()
+              } else {
+                console.log(`🔍 Found inline OpenAPI spec in HTML from: ${url}`)
+              }
+
+              const version = this.detectVersion(spec)
+
+              if (version !== 'unknown') {
+                sources.push({
+                  type: version,
+                  source: 'live',
+                  url,
+                  spec,
+                  timestamp: new Date().toISOString(),
+                  hash: this.generateHash(spec),
+                })
+
+                console.log(`✅ Found OpenAPI ${version} at: ${url}`)
+                break
+              }
+            }
           }
         }
       } catch {
@@ -249,23 +300,125 @@ export class OpenAPIDiscovery {
   }
 
   /**
-   * 从 swagger-ui-init.js 提取 spec
+   * 从 HTML 中提取 OpenAPI JSON URL 或内联规范
+   * @returns 返回 URL 和 spec 对象，或 null
    */
-  private async extractSpecFromSwaggerInit(baseUrl: string, swaggerPath: string): Promise<OpenAPISpec | null> {
-    // 构建 swagger-ui-init.js 的 URL
-    const initUrl = `${baseUrl}${swaggerPath.replace(/\/$/, '')}/swagger-ui-init.js`
-    try {
-      const response = await fetch(initUrl, {
-        signal: AbortSignal.timeout(5000),
-      })
-      if (response.ok) {
-        const text = await response.text()
-        return this.extractSwaggerDocFromHtml(text)
+  private async extractOpenApiFromHtml(html: string, baseUrl: string): Promise<{ url: string, spec: any } | null> {
+    // 1. 如果是 Swagger UI 页面，尝试从 swagger-ui-init.js 提取内联规范
+    if (html.includes('swagger-ui') || html.includes('SwaggerUI')) {
+      // 尝试多个可能的 swagger-ui-init.js 路径
+      const possiblePaths = [
+        '/swagger-ui-init.js',           // 标准路径
+        '/api-docs/swagger-ui-init.js',  // swagger-ui-express 路径
+        '/docs/swagger-ui-init.js',      // 其他常见路径
+      ]
+
+      for (const initPath of possiblePaths) {
+        const initJsUrl = this.resolveUrl(baseUrl, initPath)
+        try {
+          const initResponse = await fetch(initJsUrl, {
+            signal: AbortSignal.timeout(5000),
+          })
+          if (initResponse.ok) {
+            const initJs = await initResponse.text()
+            // 尝试提取 swaggerDoc 对象（swagger-ui-express 使用的方式）
+            // swaggerDoc 对象格式: "swaggerDoc": { ... }
+            // 查找 "swaggerDoc": { 开始位置
+            const swaggerDocPattern = /"swaggerDoc"\s*:\s*\{/
+            const match = initJs.match(swaggerDocPattern)
+            if (match && match.index !== undefined) {
+              // 找到了 "swaggerDoc": {  开始解析
+              const startIdx = match.index + match[0].length
+              // 使用简单的括号计数找到对应的结束括号
+              let braceCount = 1
+              let endIdx = startIdx
+              for (let i = startIdx; i < initJs.length && braceCount > 0; i++) {
+                if (initJs[i] === '{') braceCount++
+                else if (initJs[i] === '}') braceCount--
+                if (braceCount === 0) {
+                  endIdx = i
+                  break
+                }
+              }
+              const specStr = initJs.substring(startIdx, endIdx).trim()
+              try {
+                // 移除可能存在的尾随逗号
+                const cleanStr = specStr.replace(/,\s*$/, '')
+                const spec = JSON.parse(cleanStr)
+                if (spec && (spec.openapi || spec.swagger)) {
+                  return { url: initJsUrl, spec }
+                }
+              } catch {
+                // JSON 解析失败，尝试其他方式
+              }
+            }
+            // 也尝试提取 url 配置
+            const urlMatch = initJs.match(/url\s*:\s*["']([^"']+)["']/)
+            if (urlMatch && urlMatch[1]) {
+              const specUrl = this.resolveUrl(baseUrl, urlMatch[1])
+              const specResponse = await fetch(specUrl, {
+                signal: AbortSignal.timeout(5000),
+                headers: { 'Accept': 'application/json' },
+              })
+              if (specResponse.ok) {
+                const spec = await specResponse.json()
+                return { url: specUrl, spec }
+              }
+            }
+          }
+        } catch {
+          // 忽略获取 init.js 的错误，继续尝试下一个路径
+        }
       }
-    } catch {
-      // 忽略
     }
+
+    // 2. <link rel="api正式文档" type="application/json" href="...">
+    let match = html.match(SWAGGER_LINK_REGEX) || html.match(SWAGGER_LINK_REGEX_ALT)
+    if (match) {
+      const url = this.resolveUrl(baseUrl, match[1])
+      return { url, spec: null }
+    }
+
+    // 3. url: "..." 在 script 或 config 中
+    match = html.match(SWAGGER_URL_REGEX)
+    if (match) {
+      const url = this.resolveUrl(baseUrl, match[1])
+      return { url, spec: null }
+    }
+
+    // 4. SwaggerUIBundle({ url: "..." })
+    match = html.match(SWAGGER_UIBUNDLE_REGEX)
+    if (match) {
+      const url = this.resolveUrl(baseUrl, match[1])
+      return { url, spec: null }
+    }
+
+    // 5. urls: [{ url: "...", name: "..." }]
+    const urlsMatch = html.match(/urls\s*:\s*\[\s*\{\s*url\s*:\s*["']([^"']+)["']/)
+    if (urlsMatch) {
+      const url = this.resolveUrl(baseUrl, urlsMatch[1])
+      return { url, spec: null }
+    }
+
     return null
+  }
+
+  /**
+   * 解析相对 URL 为绝对 URL
+   */
+  private resolveUrl(baseUrl: string, relativeUrl: string): string {
+    if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
+      return relativeUrl
+    }
+    if (relativeUrl.startsWith('//')) {
+      return 'https:' + relativeUrl
+    }
+    // 相对路径，基于 baseUrl
+    const base = new URL(baseUrl)
+    if (relativeUrl.startsWith('/')) {
+      return `${base.protocol}//${base.host}${relativeUrl}`
+    }
+    return `${base.protocol}//${base.host}/${relativeUrl}`
   }
 
   /**
@@ -441,83 +594,6 @@ export class OpenAPIDiscovery {
       // TODO: 支持 YAML 解析
       return null
     }
-  }
-
-  /**
-   * 从 HTML 页面中提取 swaggerDoc 对象
-   */
-  private extractSwaggerDocFromHtml(html: string): OpenAPISpec | null {
-    // 策略1: 查找 var options = { "swaggerDoc": { ... } } 形式
-    // 这种格式的 swagger-ui-init.js 使用 var options 包裹
-    const optionsMatch = html.match(/var\s+options\s*=\s*(\{[\s\S]*?\})\s*;/)
-    if (optionsMatch && optionsMatch[1]) {
-      try {
-        const optionsObj = JSON.parse(optionsMatch[1])
-        if (optionsObj.swaggerDoc && (optionsObj.swaggerDoc.openapi || optionsObj.swaggerDoc.swagger)) {
-          return optionsObj.swaggerDoc
-        }
-      } catch {
-        // 忽略
-      }
-    }
-
-    // 策略2: 查找 window.swaggerDoc = { ... }
-    const windowMatch = html.match(/window\.swaggerDoc\s*=\s*\{([\s\S]*?)\}\s*;/)
-    if (windowMatch && windowMatch[1]) {
-      try {
-        const spec = JSON.parse('{' + windowMatch[1] + '}')
-        if (spec && (spec.openapi || spec.swagger)) {
-          return spec
-        }
-      } catch {
-        // 忽略
-      }
-    }
-
-    // 策略3: 使用括号计数法提取 "swaggerDoc": { ... }
-    const swaggerDocIndex = html.indexOf('"swaggerDoc"')
-    if (swaggerDocIndex === -1) {
-      return null
-    }
-
-    // 找到 "swaggerDoc" 后面的 { 位置
-    let braceStart = -1
-    for (let i = swaggerDocIndex; i < html.length; i++) {
-      if (html[i] === ':') {
-        // 跳过冒号后的空白
-        let j = i + 1
-        while (j < html.length && (html[j] === ' ' || html[j] === '\t' || html[j] === '\n')) j++
-        if (html[j] === '{') {
-          braceStart = j
-          break
-        }
-      }
-    }
-
-    if (braceStart === -1) return null
-
-    // 括号计数找到匹配的 }
-    let braceCount = 1
-    let endPos = braceStart + 1
-    while (endPos < html.length && braceCount > 0) {
-      if (html[endPos] === '{') braceCount++
-      else if (html[endPos] === '}') braceCount--
-      endPos++
-    }
-
-    if (braceCount !== 0) return null
-
-    const swaggerDocJson = html.substring(braceStart, endPos)
-    try {
-      const spec = JSON.parse(swaggerDocJson)
-      if (spec && (spec.openapi || spec.swagger)) {
-        return spec
-      }
-    } catch {
-      // 忽略
-    }
-
-    return null
   }
 
   /**

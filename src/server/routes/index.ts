@@ -18,8 +18,35 @@ export function setWebSocketServer(wss: WebSocketServer) {
   globalWss = wss
 }
 
+// Paths that the web UI uses for its own internal API calls
+// These should not be broadcast as "intercepted requests"
+const INTERNAL_UI_PATHS = [
+  '/api/requests',
+  '/api/mocks',
+  '/api/global-toggle',
+  '/api/stats',
+  '/api/llm/config',
+  '/api/ai/status',
+  '/health',
+  '/api/ai/generate',
+  '/api/ai/improve',
+  '/api/ai/docs',
+  '/api/ai/chat',
+]
+
+function isInternalUiRequest(path: string): boolean {
+  // Check if the request path matches internal UI paths
+  return INTERNAL_UI_PATHS.some(internalPath => path === internalPath || path.startsWith(internalPath + '?'))
+}
+
 function broadcastRequest(method: string, path: string, status: number, duration: number) {
   if (!globalWss) return
+
+  // Skip broadcasting internal UI requests (these are the web UI's own API calls)
+  if (isInternalUiRequest(path)) {
+    return
+  }
+
   const message = JSON.stringify({
     type: 'REQUEST',
     data: { method, path, status, duration, timestamp: new Date().toISOString() }
@@ -516,6 +543,30 @@ export function setupRoutes(
       const limit = parseInt(req.query.limit as string) || 100
       const requests = await database.getRecentRequests(limit)
       res.json(requests)
+    } catch (error: any) {
+      res.status(500).json({ error: error.message })
+    }
+  })
+
+  // Clear all request logs
+  app.delete('/api/requests', async (req, res) => {
+    try {
+      await database.clearRequests()
+      res.json({ success: true, message: 'All request logs cleared' })
+    } catch (error: any) {
+      res.status(500).json({ error: error.message })
+    }
+  })
+
+  // Delete selected request logs
+  app.post('/api/requests/delete', async (req, res) => {
+    try {
+      const { ids } = req.body
+      if (!Array.isArray(ids)) {
+        return res.status(400).json({ error: 'ids must be an array' })
+      }
+      await database.deleteRequests(ids)
+      res.json({ success: true, deleted: ids.length })
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }

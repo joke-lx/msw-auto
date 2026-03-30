@@ -69,6 +69,14 @@ class InMemoryStorage {
     return this.requestLogs.slice(0, limit)
   }
 
+  async clearRequests(): Promise<void> {
+    this.requestLogs = []
+  }
+
+  async deleteRequests(ids: string[]): Promise<void> {
+    this.requestLogs = this.requestLogs.filter(log => !ids.includes(log.id))
+  }
+
   // Contract operations
   async getAllContracts(): Promise<Contract[]> {
     return Array.from(this.contracts.values()).sort((a, b) =>
@@ -343,6 +351,21 @@ export class Database {
         is_mocked: row.is_mocked === 1
       }))
     } catch { return [] }
+  }
+
+  async clearRequests(): Promise<void> {
+    if (this.useMemory) return this.memory.clearRequests()
+    try {
+      this.db.prepare('DELETE FROM request_logs').run()
+    } catch {}
+  }
+
+  async deleteRequests(ids: string[]): Promise<void> {
+    if (this.useMemory) return this.memory.deleteRequests(ids)
+    try {
+      const placeholders = ids.map(() => '?').join(',')
+      this.db.prepare(`DELETE FROM request_logs WHERE id IN (${placeholders})`).run(...ids)
+    } catch {}
   }
 
   // ============ Contract Operations ============

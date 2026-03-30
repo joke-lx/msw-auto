@@ -1,9 +1,10 @@
-import { Card, Row, Col, Statistic, Table, Tag, Switch, theme, Button, message, Badge } from 'antd'
-import { PlusOutlined, ThunderboltOutlined, WifiOutlined, DisconnectOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, Table, Tag, Switch, theme, Button, message, Badge, Popconfirm, Space } from 'antd'
+import { PlusOutlined, ThunderboltOutlined, WifiOutlined, DisconnectOutlined, DeleteOutlined, ClearOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useMockStore } from '@/stores/mockStore'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
+import { logApi } from '@/api/client'
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation()
@@ -14,6 +15,7 @@ const Dashboard: React.FC = () => {
   // Local state for request logs (loaded from server)
   const [requestLogs, setRequestLogs] = useState<any[]>([])
   const [wsConnected, setWsConnected] = useState(false)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const wsRef = useRef<WebSocket | null>(null)
 
   const activeMocks = mocks.filter((mock) => mock.enabled).length
@@ -97,6 +99,33 @@ const Dashboard: React.FC = () => {
     } catch (error) {
       console.error(error)
       message.error('操作失败')
+    }
+  }
+
+  // 清除选中的请求日志
+  const handleClearSelected = async () => {
+    try {
+      const ids = selectedRowKeys as string[]
+      await logApi.deleteSelected(ids)
+      setRequestLogs((prev) => prev.filter((log) => !ids.includes(log.id)))
+      setSelectedRowKeys([])
+      message.success(`已清除 ${ids.length} 条请求日志`)
+    } catch (error) {
+      console.error(error)
+      message.error('清除失败')
+    }
+  }
+
+  // 清除所有请求日志
+  const handleClearAll = async () => {
+    try {
+      await logApi.clear()
+      setRequestLogs([])
+      setSelectedRowKeys([])
+      message.success('已清除所有请求日志')
+    } catch (error) {
+      console.error(error)
+      message.error('清除失败')
     }
   }
 
@@ -271,7 +300,38 @@ const Dashboard: React.FC = () => {
           </Card>
         </Col>
       </Row>
-      <Card title={t('dashboard.recentRequests')} style={{ marginTop: 24 }}>
+      <Card
+        title={t('dashboard.recentRequests')}
+        style={{ marginTop: 24 }}
+        extra={
+          <Space>
+            {selectedRowKeys.length > 0 && (
+              <Popconfirm
+                title="确定要清除选中的请求吗？"
+                onConfirm={handleClearSelected}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button icon={<DeleteOutlined />} danger>
+                  清除选中 ({selectedRowKeys.length})
+                </Button>
+              </Popconfirm>
+            )}
+            {requestLogs.length > 0 && (
+              <Popconfirm
+                title="确定要清除所有请求日志吗？"
+                onConfirm={handleClearAll}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button icon={<ClearOutlined />}>
+                  清除全部
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        }
+      >
         {requestLogs.length > 0 ? (
           <Table
             dataSource={requestLogs}
@@ -279,6 +339,12 @@ const Dashboard: React.FC = () => {
             rowKey="id"
             pagination={{ pageSize: 10 }}
             size="small"
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (newSelectedRowKeys: React.Key[]) => {
+                setSelectedRowKeys(newSelectedRowKeys)
+              },
+            }}
           />
         ) : (
           <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
