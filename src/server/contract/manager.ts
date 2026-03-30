@@ -316,7 +316,6 @@ export class ContractManager {
    */
   private generateHash(spec: OpenAPISpec): string {
     const content = JSON.stringify(spec)
-    const crypto = require('crypto')
     return crypto.createHash('sha256').update(content).digest('hex')
   }
 
