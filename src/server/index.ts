@@ -38,7 +38,7 @@ function loadConfig(): ServerConfig {
 
   return {
     port: parseInt(process.env.PORT || envConfig.port || '3001'),
-    webPort: parseInt(process.env.WEB_PORT || envConfig.webPort || '3000'),
+    webPort: parseInt(process.env.WEB_PORT || envConfig.webPort || '4000'),
     backendUrl: process.env.BACKEND_URL || envConfig.backendUrl,
     dbPath: process.env.DB_PATH || envConfig.dbPath || './data/mocks.db',
     claudeApiKey: process.env.ANTHROPIC_API_KEY || envConfig.apiKey || envConfig.claudeApiKey,
