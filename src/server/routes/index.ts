@@ -32,6 +32,8 @@ const INTERNAL_UI_PATHS = [
   '/api/ai/improve',
   '/api/ai/docs',
   '/api/ai/chat',
+  '/',
+  '/favicon.ico',
 ]
 
 function isInternalUiRequest(path: string): boolean {
@@ -542,7 +544,8 @@ export function setupRoutes(
     try {
       const limit = parseInt(req.query.limit as string) || 100
       const requests = await database.getRecentRequests(limit)
-      res.json(requests)
+      const filtered = requests.filter(r => !isInternalUiRequest(r.path))
+      res.json(filtered)
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
