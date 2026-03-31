@@ -50,3 +50,5 @@ yarn-error.log*
 coverage/
 .nyc_output/
 .gstack/
+
+data/
