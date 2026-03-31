@@ -18,36 +18,8 @@ export function setWebSocketServer(wss: WebSocketServer) {
   globalWss = wss
 }
 
-// Paths that the web UI uses for its own internal API calls
-// These should not be broadcast as "intercepted requests"
-const INTERNAL_UI_PATHS = [
-  '/api/requests',
-  '/api/mocks',
-  '/api/global-toggle',
-  '/api/stats',
-  '/api/llm/config',
-  '/api/ai/status',
-  '/health',
-  '/api/ai/generate',
-  '/api/ai/improve',
-  '/api/ai/docs',
-  '/api/ai/chat',
-  '/',
-  '/favicon.ico',
-]
-
-function isInternalUiRequest(path: string): boolean {
-  // Check if the request path matches internal UI paths
-  return INTERNAL_UI_PATHS.some(internalPath => path === internalPath || path.startsWith(internalPath + '?'))
-}
-
 function broadcastRequest(method: string, path: string, status: number, duration: number) {
   if (!globalWss) return
-
-  // Skip broadcasting internal UI requests (these are the web UI's own API calls)
-  if (isInternalUiRequest(path)) {
-    return
-  }
 
   const message = JSON.stringify({
     type: 'REQUEST',
@@ -62,13 +34,18 @@ function broadcastRequest(method: string, path: string, status: number, duration
 
 export interface ServerConfig {
   port: number
+  uiPort: number
   webPort: number
   backendUrl?: string
   dbPath?: string
   claudeApiKey?: string
 }
 
-export function setupRoutes(
+// ============================================================================
+// Internal UI API Routes (port 3002)
+// All management API calls from Web UI
+// ============================================================================
+export function setupInternalRoutes(
   app: express.Application,
   mockManager: MockManager,
   database: Database,
@@ -99,7 +76,6 @@ export function setupRoutes(
       mockManager.setGlobalEnabled(enabled)
       res.json({ enabled: mockManager.isGlobalEnabled() })
     } else {
-      // Toggle if no enabled param
       const newState = mockManager.toggleGlobal()
       res.json({ enabled: newState })
     }
@@ -185,91 +161,64 @@ export function setupRoutes(
   })
 
   // ============ AI Generation API ============
-
-  // Generate mock using AI
   app.post('/api/ai/generate', async (req, res) => {
     try {
       const { method, path, description, context } = req.body
-
       if (!method || !path) {
         return res.status(400).json({ error: 'method and path are required' })
       }
-
-      const generated = await claudeClient.generateMock({
-        method,
-        path,
-        description,
-        context,
-      })
-
-      // Save the generated mock
+      const generated = await claudeClient.generateMock({ method, path, description, context })
       const mock = await mockManager.create(generated)
-
       res.status(201).json(mock)
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Improve existing mock using AI
   app.post('/api/ai/improve/:id', async (req, res) => {
     try {
       const { instruction } = req.body
-
       if (!instruction) {
         return res.status(400).json({ error: 'instruction is required' })
       }
-
       const existingMock = await mockManager.findById(req.params.id)
       if (!existingMock) {
         return res.status(404).json({ error: 'Mock not found' })
       }
-
       const improved = await claudeClient.improveMock(existingMock, instruction)
-
-      // Update the mock with improvements
       const updated = await mockManager.update(req.params.id, improved)
-
       res.json(updated)
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Generate documentation using AI
   app.post('/api/ai/docs/:id', async (req, res) => {
     try {
       const mock = await mockManager.findById(req.params.id)
       if (!mock) {
         return res.status(404).json({ error: 'Mock not found' })
       }
-
       const documentation = await claudeClient.generateDocumentation(mock)
-
       res.json({ documentation })
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Chat with AI assistant
   app.post('/api/ai/chat', async (req, res) => {
     try {
       const { messages, context } = req.body
-
       if (!messages || !Array.isArray(messages)) {
         return res.status(400).json({ error: 'messages array is required' })
       }
-
       const reply = await claudeClient.chat(messages, context)
-
       res.json({ reply })
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Check AI status
   app.get('/api/ai/status', (req, res) => {
     res.json({
       enabled: claudeClient.isEnabled(),
@@ -277,22 +226,16 @@ export function setupRoutes(
     })
   })
 
-  // Get LLM configuration
   app.get('/api/llm/config', async (req, res) => {
     try {
       const configPath = './data/config.json'
       let config: any = {}
-
       try {
         const fs = await import('fs')
         if (fs.existsSync(configPath)) {
           config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
         }
-      } catch (e) {
-        // Ignore file read errors
-      }
-
-      // Return safe config (hide full API key)
+      } catch (e) {}
       res.json({
         provider: config.provider || 'anthropic',
         apiKey: config.apiKey ? '***' : '',
@@ -306,65 +249,32 @@ export function setupRoutes(
     }
   })
 
-  // Save LLM configuration
   app.post('/api/llm/config', async (req, res) => {
     try {
       const { provider, apiKey, baseUrl, model } = req.body
-
       if (!provider || (provider !== 'anthropic' && provider !== 'openai' && provider !== 'custom')) {
-        return res.status(400).json({ error: 'Invalid provider. Must be anthropic, openai, or custom' })
+        return res.status(400).json({ error: 'Invalid provider' })
       }
-
-      // Read existing config
       const fs = await import('fs')
       const configPath = './data/config.json'
       let config: any = {}
-
       try {
         if (fs.existsSync(configPath)) {
           config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
         }
-      } catch (e) {
-        // Ignore
-      }
-
-      // Update config
+      } catch (e) {}
       config.provider = provider
-      if (apiKey && apiKey !== '***') {
-        config.apiKey = apiKey
-      }
-      if (baseUrl) {
-        config.baseUrl = baseUrl
-      }
-      if (model) {
-        config.model = model
-      }
-
-      // Save config
+      if (apiKey && apiKey !== '***') config.apiKey = apiKey
+      if (baseUrl) config.baseUrl = baseUrl
+      if (model) config.model = model
       fs.mkdirSync('./data', { recursive: true })
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
-
-      // Try to hot reload the Claude client
       try {
         const { reloadClaudeClient } = await import('../llm/claude-client.js')
         const reloaded = await reloadClaudeClient(config)
-        if (reloaded) {
-          res.json({
-            success: true,
-            message: 'Configuration saved and LLM client reloaded successfully!',
-          })
-        } else {
-          res.json({
-            success: true,
-            message: 'Configuration saved. LLM client reload failed - please restart the server.',
-          })
-        }
+        res.json({ success: true, message: reloaded ? 'Reloaded!' : 'Restart needed' })
       } catch (e) {
-        // If reload function doesn't exist, fall back to restart message
-        res.json({
-          success: true,
-          message: 'Configuration saved. Please restart the server to apply changes.',
-        })
+        res.json({ success: true, message: 'Restart needed' })
       }
     } catch (error: any) {
       res.status(500).json({ error: error.message })
@@ -372,8 +282,6 @@ export function setupRoutes(
   })
 
   // ============ Version Management API ============
-
-  // Get mock versions
   app.get('/api/mocks/:id/versions', async (req, res) => {
     try {
       const versions = await versionManager.getVersions(req.params.id)
@@ -383,74 +291,43 @@ export function setupRoutes(
     }
   })
 
-  // Get specific version
   app.get('/api/mocks/:id/versions/:version', async (req, res) => {
     try {
       const version = await versionManager.getVersion(req.params.id, parseInt(req.params.version))
-      if (!version) {
-        return res.status(404).json({ error: 'Version not found' })
-      }
+      if (!version) return res.status(404).json({ error: 'Version not found' })
       res.json(version)
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Create new version (snapshot)
   app.post('/api/mocks/:id/versions', async (req, res) => {
     try {
       const mock = await mockManager.findById(req.params.id)
-      if (!mock) {
-        return res.status(404).json({ error: 'Mock not found' })
-      }
-
-      const version = await versionManager.createVersion(
-        mock.id,
-        mock.response,
-        mock.headers,
-        req.body.description
-      )
-
+      if (!mock) return res.status(404).json({ error: 'Mock not found' })
+      const version = await versionManager.createVersion(mock.id, mock.response, mock.headers, req.body.description)
       res.status(201).json(version)
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Rollback to version
   app.post('/api/mocks/:id/versions/:version/rollback', async (req, res) => {
     try {
-      const version = await versionManager.rollback(
-        req.params.id,
-        parseInt(req.params.version)
-      )
-
-      if (!version) {
-        return res.status(404).json({ error: 'Version not found' })
-      }
-
-      // Update the mock with the version
-      const mock = await mockManager.update(req.params.id, {
-        response: version.response,
-        headers: version.headers,
-      })
-
+      const version = await versionManager.rollback(req.params.id, parseInt(req.params.version))
+      if (!version) return res.status(404).json({ error: 'Version not found' })
+      const mock = await mockManager.update(req.params.id, { response: version.response, headers: version.headers })
       res.json(mock)
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Compare versions
   app.get('/api/mocks/:id/versions/compare', async (req, res) => {
     try {
       const v1 = parseInt(req.query.v1 as string)
       const v2 = parseInt(req.query.v2 as string)
-
-      if (!v1 || !v2) {
-        return res.status(400).json({ error: 'v1 and v2 query params required' })
-      }
-
+      if (!v1 || !v2) return res.status(400).json({ error: 'v1 and v2 query params required' })
       const comparison = await versionManager.compareVersions(req.params.id, v1, v2)
       res.json(comparison)
     } catch (error: any) {
@@ -459,52 +336,36 @@ export function setupRoutes(
   })
 
   // ============ Import/Export API ============
-
-  // Import from OpenAPI/Swagger
   app.post('/api/import/openapi', async (req, res) => {
     try {
       const spec = req.body
       const mocks = await importer.fromOpenAPI(spec)
-
-      // Save all mocks
       const created = []
       for (const mockData of mocks) {
         const mock = await mockManager.create(mockData)
         created.push(mock)
       }
-
-      res.status(201).json({
-        imported: created.length,
-        mocks: created,
-      })
+      res.status(201).json({ imported: created.length, mocks: created })
     } catch (error: any) {
       res.status(400).json({ error: error.message })
     }
   })
 
-  // Import from Postman
   app.post('/api/import/postman', async (req, res) => {
     try {
       const collection = req.body
       const mocks = await importer.fromPostman(collection)
-
-      // Save all mocks
       const created = []
       for (const mockData of mocks) {
         const mock = await mockManager.create(mockData)
         created.push(mock)
       }
-
-      res.status(201).json({
-        imported: created.length,
-        mocks: created,
-      })
+      res.status(201).json({ imported: created.length, mocks: created })
     } catch (error: any) {
       res.status(400).json({ error: error.message })
     }
   })
 
-  // Export to OpenAPI
   app.get('/api/export/openapi', async (req, res) => {
     try {
       const mocks = await mockManager.findAll()
@@ -515,7 +376,6 @@ export function setupRoutes(
     }
   })
 
-  // Export to Postman
   app.get('/api/export/postman', async (req, res) => {
     try {
       const mocks = await mockManager.findAll()
@@ -526,7 +386,6 @@ export function setupRoutes(
     }
   })
 
-  // Export to JSON
   app.get('/api/export/json', async (req, res) => {
     try {
       const mocks = await mockManager.findAll()
@@ -544,14 +403,12 @@ export function setupRoutes(
     try {
       const limit = parseInt(req.query.limit as string) || 100
       const requests = await database.getRecentRequests(limit)
-      const filtered = requests.filter(r => !isInternalUiRequest(r.path))
-      res.json(filtered)
+      res.json(requests)
     } catch (error: any) {
       res.status(500).json({ error: error.message })
     }
   })
 
-  // Clear all request logs
   app.delete('/api/requests', async (req, res) => {
     try {
       await database.clearRequests()
@@ -561,13 +418,10 @@ export function setupRoutes(
     }
   })
 
-  // Delete selected request logs
   app.post('/api/requests/delete', async (req, res) => {
     try {
       const { ids } = req.body
-      if (!Array.isArray(ids)) {
-        return res.status(400).json({ error: 'ids must be an array' })
-      }
+      if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' })
       await database.deleteRequests(ids)
       res.json({ success: true, deleted: ids.length })
     } catch (error: any) {
@@ -580,7 +434,6 @@ export function setupRoutes(
     try {
       const mocks = await mockManager.findAll()
       const enabledMocks = mocks.filter((m) => m.enabled).length
-
       res.json({
         totalMocks: mocks.length,
         activeMocks: enabledMocks,
@@ -598,7 +451,23 @@ export function setupRoutes(
     setupContractRoutes(app, contractManager, database)
   }
 
-  // ============ Catch-all: Mock Handler ============
+  // 404 for unmatched routes on internal API (shouldn't happen)
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Not Found', message: `Route ${req.method} ${req.path} not found on UI API` })
+  })
+}
+
+// ============================================================================
+// Interception Routes (port 3001)
+// Handles all external requests - mock matching, proxying, request logging
+// ============================================================================
+export function setupInterceptionRoutes(
+  app: express.Application,
+  mockManager: MockManager,
+  database: Database,
+  config: ServerConfig
+) {
+  // Catch-all: Mock Handler / Proxy
   app.all('*', async (req, res) => {
     const startTime = Date.now()
 
@@ -642,7 +511,7 @@ export function setupRoutes(
         timestamp: new Date().toISOString(),
       })
 
-      // Broadcast AFTER database save
+      // Broadcast AFTER database save (only to UI clients on port 3002)
       broadcastRequest(req.method, req.path, mock.status, duration)
 
       console.log(
@@ -658,7 +527,6 @@ export function setupRoutes(
         `${pc.gray(new Date().toISOString())} ${pc.blue(req.method)} ${pc.yellow(req.path)} ${pc.cyan('Proxy')}`
       )
 
-      // Proxy the request to backend
       const targetUrl = new URL(req.path, config.backendUrl)
 
       const proxyReq = http.request({
@@ -671,13 +539,10 @@ export function setupRoutes(
           host: targetUrl.host,
         },
       }, (proxyRes) => {
-        // Forward the response status and headers
         res.status(proxyRes.statusCode || 200)
         proxyRes.headers && Object.entries(proxyRes.headers).forEach(([key, value]) => {
           if (value) res.setHeader(key, value)
         })
-
-        // Stream the response body
         proxyRes.pipe(res)
       })
 
@@ -689,7 +554,6 @@ export function setupRoutes(
         })
       })
 
-      // Forward the request body if present
       if (req.body && Object.keys(req.body).length > 0) {
         proxyReq.write(JSON.stringify(req.body))
       }

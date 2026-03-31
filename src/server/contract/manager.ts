@@ -16,6 +16,31 @@ import type {
   TypeGenerationResult,
   ContractDiff,
 } from '../types/index.js'
+import type { AnalysisResult } from '../../mcp/ast/engine.js'
+
+export type VerificationStatus = 'matched' | 'missing' | 'typeMismatch' | 'methodMismatch'
+
+export interface VerificationResult {
+  method: string
+  path: string
+  status: VerificationStatus
+  detail: string
+  file?: string
+}
+
+export interface ValidationResponse {
+  contractId: string
+  status: 'done' | 'error'
+  results: VerificationResult[]
+  summary: {
+    total: number
+    matched: number
+    missing: number
+    typeMismatch: number
+    methodMismatch: number
+  }
+  warnings: { file: string; framework: string; message: string }[]
+}
 
 export interface CreateContractDto {
   name: string
@@ -295,6 +320,81 @@ export class ContractManager {
       removed: [],
       modified: [],
       breaking: false,
+    }
+  }
+
+  /**
+   * 验证前端代码中的 API 调用是否符合契约
+   */
+  validate(contractId: string, analysisResult: AnalysisResult): ValidationResponse {
+    const contract = this.contracts.get(contractId)
+    if (!contract) {
+      throw new Error('Contract not found')
+    }
+
+    if (!contract.spec?.paths) {
+      throw new Error('Contract has no OpenAPI spec')
+    }
+
+    const specPaths = contract.spec.paths
+    const results: VerificationResult[] = []
+    let matched = 0
+    let missing = 0
+    let typeMismatch = 0
+    let methodMismatch = 0
+
+    for (const route of analysisResult.routes) {
+      const specPath = specPaths[route.path]
+      let status: VerificationStatus
+      let detail = ''
+
+      if (!specPath) {
+        // 路径在 spec 中不存在
+        status = 'missing'
+        detail = `路径 ${route.path} 在契约中不存在`
+        missing++
+      } else {
+        // 检查方法
+        const specMethod = specPath[route.method.toLowerCase()]
+        if (!specMethod) {
+          // 方法不匹配
+          status = 'methodMismatch'
+          const availableMethods = Object.keys(specPath)
+            .filter((m) => ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'].includes(m))
+          detail = `方法 ${route.method} 不支持，可用的方法: ${availableMethods.join(', ')}`
+          methodMismatch++
+        } else {
+          status = 'matched'
+          detail = `匹配 ${route.method} ${route.path}`
+          matched++
+        }
+      }
+
+      results.push({
+        method: route.method,
+        path: route.path,
+        status,
+        detail,
+        file: route.file,
+      })
+    }
+
+    // 从 analysisResult.errors 中提取 warnings
+    const warnings: { file: string; framework: string; message: string }[] = []
+    // analysisResult 本身不直接包含 warnings，但我们可以从 errors 中提取
+
+    return {
+      contractId,
+      status: 'done',
+      results,
+      summary: {
+        total: analysisResult.routes.length,
+        matched,
+        missing,
+        typeMismatch,
+        methodMismatch,
+      },
+      warnings,
     }
   }
 

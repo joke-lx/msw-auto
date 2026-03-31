@@ -4,10 +4,12 @@
  */
 
 import * as parser from '@babel/parser'
-import traverse from '@babel/traverse'
+import * as traverseModule from '@babel/traverse'
 import * as t from '@babel/types'
 import * as fs from 'fs'
 import * as path from 'path'
+
+const traverse = (traverseModule as any).default?.default || (traverseModule as any).default || traverseModule
 
 export interface RouteDefinition {
   method: string
@@ -315,5 +317,76 @@ export class ASTEngine {
     }
 
     return undefined
+  }
+
+  /**
+   * 递归分析目录，提取所有 API 调用
+   */
+  async analyzeDirectory(
+    dirPath: string,
+    options: { extensions?: string[]; maxFiles?: number } = {}
+  ): Promise<AnalysisResult> {
+    const extensions = options.extensions || ['.ts', '.tsx', '.js', '.jsx']
+    const maxFiles = options.maxFiles || 5000
+
+    const allRoutes: RouteDefinition[] = []
+    const allErrors: string[] = []
+    const warnings: { file: string; framework: string; message: string }[] = []
+    let filesScanned = 0
+
+    const scanDir = async (currentPath: string): Promise<void> => {
+      if (filesScanned >= maxFiles) return
+
+      try {
+        const entries = fs.readdirSync(currentPath, { withFileTypes: true })
+
+        for (const entry of entries) {
+          if (filesScanned >= maxFiles) break
+
+          const fullPath = path.join(currentPath, entry.name)
+
+          // 跳过不需要的目录
+          if (
+            entry.isDirectory() &&
+            !['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', 'coverage'].includes(entry.name)
+          ) {
+            await scanDir(fullPath)
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name)
+            if (extensions.includes(ext)) {
+              filesScanned++
+              const result = await this.analyzeFile(fullPath)
+
+              if (result.framework === 'unknown') {
+                warnings.push({
+                  file: fullPath,
+                  framework: 'unknown',
+                  message: '无法识别框架，已跳过',
+                })
+                continue
+              }
+
+              if (result.errors.length > 0) {
+                allErrors.push(...result.errors)
+              }
+
+              if (result.routes.length > 0) {
+                allRoutes.push(...result.routes)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        allErrors.push(`Failed to scan directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+
+    await scanDir(dirPath)
+
+    return {
+      routes: allRoutes,
+      framework: 'mixed',
+      errors: allErrors,
+    }
   }
 }

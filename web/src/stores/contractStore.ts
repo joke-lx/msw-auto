@@ -193,7 +193,9 @@ export const useContractStore = create<ContractState>()(
                 description: operation?.description,
                 operationId: operation?.operationId,
                 tags: operation?.tags,
-                hasResponse: !!operation?.responses?.['200'],
+                hasResponse: Object.keys(operation?.responses || {}).some((code) =>
+                  code.startsWith('2'),
+                ),
               })
             }
           }
