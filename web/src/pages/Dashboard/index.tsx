@@ -39,7 +39,7 @@ const Dashboard: React.FC = () => {
     let reconnectTimer: NodeJS.Timeout
 
     const connectWebSocket = () => {
-      const ws = new WebSocket('ws://localhost:3001/ws')
+      const ws = new WebSocket('ws://localhost:3002/ws')
       wsRef.current = ws
 
       ws.onopen = () => {

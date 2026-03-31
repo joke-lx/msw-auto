@@ -35,6 +35,7 @@ import {
   CheckOutlined,
   ThunderboltOutlined,
   SearchOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useContractStore } from '@/stores/contractStore'
@@ -244,7 +245,7 @@ const ContractDetail = () => {
   }
 
   const renderInfo = () => {
-    if (!selectedContract) return null
+    if (!selectedContract || !selectedContract.spec) return null
     const info = selectedContract.spec.info
 
     return (
@@ -425,6 +426,12 @@ const ContractDetail = () => {
         }
         extra={
           <Space>
+            <Button
+              icon={<CheckCircleOutlined />}
+              onClick={() => navigate(`/validate?contractId=${id}`)}
+            >
+              {t('contracts.validate')}
+            </Button>
             <Button icon={<ReloadOutlined />} onClick={handleSync} loading={loading}>
               {t('contracts.sync')}
             </Button>

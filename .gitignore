@@ -37,6 +37,8 @@ build/
 # Data
 data/*.db
 data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 
 # Logs
 *.log
@@ -48,3 +50,5 @@ yarn-error.log*
 coverage/
 .nyc_output/
 .gstack/
+
+data/

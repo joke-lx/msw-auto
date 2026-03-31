@@ -7,6 +7,7 @@ import ContractDetail from '../pages/Contracts/detail'
 import MockEditor from '../pages/MockEditor'
 import Settings from '../pages/Settings'
 import Documentation from '../pages/Documentation'
+import ValidationPage from '../pages/Validation'
 
 const router = createBrowserRouter([
   {
@@ -32,6 +33,10 @@ const router = createBrowserRouter([
       {
         path: 'contracts/:id',
         element: <ContractDetail />,
+      },
+      {
+        path: 'validate',
+        element: <ValidationPage />,
       },
       {
         path: 'mocks',
