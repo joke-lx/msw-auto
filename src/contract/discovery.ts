@@ -13,6 +13,7 @@ const SWAGGER_LINK_REGEX_ALT = /<link[^>]*href=["']([^"']+)["'][^>]*rel=["']api�
 const SWAGGER_URL_REGEX = /url\s*:\s*["']([^"']+)["']/
 const SWAGGER_UIBUNDLE_REGEX = /SwaggerUIBundle\(\s*\{[^}]*url\s*:\s*["']([^"']+)["']/
 
+
 export interface DiscoveryOptions {
   projectPath: string
   backendUrl?: string
@@ -22,8 +23,59 @@ export interface DiscoveryOptions {
 }
 
 export class OpenAPIDiscovery {
+  /**
+   * 带重定向跟随的 fetch（Node.js fetch 默认不跟随 301/302）
+   */
+  private async fetchWithRedirect(
+    url: string,
+    options: { timeout?: number; headers?: Record<string, string> } = {}
+  ): Promise<{ response: Response; finalUrl: string }> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), options.timeout || 5000)
+
+    let response: Response
+    let finalUrl = url
+
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json,application/swagger+json,application/vnd.oai.openapi,text/html',
+          ...options.headers,
+        },
+      })
+
+      // 跟随最多 5 次重定向
+      let redirectCount = 0
+      while ((response.status === 301 || response.status === 302 || response.status === 303 || response.status === 307 || response.status === 308) && redirectCount < 5) {
+        const location = response.headers.get('location')
+        if (!location) break
+
+        // 解析相对路径
+        finalUrl = this.resolveUrl(url, location)
+        controller.abort()
+        const newController = new AbortController()
+        const newTimeout = setTimeout(() => newController.abort(), options.timeout || 5000)
+        response = await fetch(finalUrl, {
+          signal: newController.signal,
+          headers: {
+            Accept: 'application/json,application/swagger+json,application/vnd.oai.openapi,text/html',
+            ...options.headers,
+          },
+        })
+        clearTimeout(newTimeout)
+        redirectCount++
+      }
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    return { response, finalUrl }
+  }
+
   private readonly commonEndpoints = [
     '/api-docs',
+    '/api-docs/',
     '/swagger.json',
     '/swagger/v1/swagger.json',
     '/openapi.json',
@@ -218,11 +270,8 @@ export class OpenAPIDiscovery {
     // 默认：遍历 commonEndpoints
     for (const endpoint of this.commonEndpoints) {
       try {
-        const response = await fetch(`${serverUrl}${endpoint}`, {
-          signal: AbortSignal.timeout(options.timeout || 5000),
-          headers: {
-            'Accept': 'application/json,application/swagger+json,application/vnd.oai.openapi',
-          },
+        const { response, finalUrl } = await this.fetchWithRedirect(`${serverUrl}${endpoint}`, {
+          timeout: options.timeout || 5000,
         })
 
         if (response.ok) {
@@ -237,13 +286,13 @@ export class OpenAPIDiscovery {
               sources.push({
                 type: version,
                 source: 'live',
-                url: `${serverUrl}${endpoint}`,
+                url: finalUrl,
                 spec,
                 timestamp: new Date().toISOString(),
                 hash: this.generateHash(spec),
               })
 
-              console.log(`✅ Found OpenAPI ${version} at: ${serverUrl}${endpoint}`)
+              console.log(`✅ Found OpenAPI ${version} at: ${finalUrl}`)
               break
             }
           } else if (contentType.includes('html')) {
@@ -321,35 +370,45 @@ export class OpenAPIDiscovery {
           })
           if (initResponse.ok) {
             const initJs = await initResponse.text()
-            // 尝试提取 swaggerDoc 对象（swagger-ui-express 使用的方式）
-            // swaggerDoc 对象格式: "swaggerDoc": { ... }
-            // 查找 "swaggerDoc": { 开始位置
-            const swaggerDocPattern = /"swaggerDoc"\s*:\s*\{/
-            const match = initJs.match(swaggerDocPattern)
-            if (match && match.index !== undefined) {
-              // 找到了 "swaggerDoc": {  开始解析
-              const startIdx = match.index + match[0].length
-              // 使用简单的括号计数找到对应的结束括号
-              let braceCount = 1
-              let endIdx = startIdx
-              for (let i = startIdx; i < initJs.length && braceCount > 0; i++) {
-                if (initJs[i] === '{') braceCount++
-                else if (initJs[i] === '}') braceCount--
-                if (braceCount === 0) {
-                  endIdx = i
-                  break
-                }
+            // 提取 swaggerDoc 对象（swagger-ui-express 格式）
+            // 找到 "swaggerDoc" 键后的第一个 {，然后匹配其闭括号
+            const sdKeyIdx = initJs.indexOf('"swaggerDoc"')
+            if (sdKeyIdx !== -1) {
+              let bracePos = -1
+              for (let i = sdKeyIdx; i < initJs.length; i++) {
+                if (initJs[i] === '{') { bracePos = i; break }
               }
-              const specStr = initJs.substring(startIdx, endIdx).trim()
-              try {
-                // 移除可能存在的尾随逗号
-                const cleanStr = specStr.replace(/,\s*$/, '')
-                const spec = JSON.parse(cleanStr)
-                if (spec && (spec.openapi || spec.swagger)) {
-                  return { url: initJsUrl, spec }
+              if (bracePos !== -1) {
+                // depth 从 0 开始：第一个 { 让 depth=1，第一个让 depth 回 0 的 } 即为闭括号
+                let depth = 0
+                for (let i = bracePos; i < initJs.length; i++) {
+                  if (initJs[i] === '{') depth++
+                  else if (initJs[i] === '}') {
+                    depth--
+                    if (depth === 0) {
+                      // 包含首尾 { }
+                      const raw = initJs.substring(bracePos, i + 1)
+                      try {
+                        const spec = JSON.parse(raw)
+                        if (spec && (spec.openapi || spec.swagger)) {
+                          return { url: initJsUrl, spec }
+                        }
+                      } catch {
+                        // JSON 解析失败，尝试移除尾部逗号（JavaScript 对象可能有）
+                        try {
+                          const cleaned = raw.replace(/,(\s*)$/, '$1')
+                          const spec = JSON.parse(cleaned)
+                          if (spec && (spec.openapi || spec.swagger)) {
+                            return { url: initJsUrl, spec }
+                          }
+                        } catch {
+                          // 解析失败，忽略
+                        }
+                      }
+                      break
+                    }
+                  }
                 }
-              } catch {
-                // JSON 解析失败，尝试其他方式
               }
             }
             // 也尝试提取 url 配置
