@@ -17,28 +17,37 @@
   </a>
 </p>
 
-> Intelligent automated Mock server built on MSW (Mock Service Worker) with Web UI management and AI generation capabilities.
+> **API Contract-Driven Mock Server** — Auto-generate 100% spec-compliant Mock data from OpenAPI/Swagger specs, with automatic TypeScript type generation.
 
 ## Features
 
-- **Powerful Mocking** - Built on MSW, supports REST, GraphQL, and WebSocket
-- **Global Toggle** - One-click enable/disable all Mock interceptions
-- **Web UI Management** - Intuitive graphical interface for managing Mock configurations
-- **AI Generation** - Auto-generate Mock data using LLM
-- **Frontend Analysis** - Auto-analyze API calls in frontend projects (axios/fetch/XHR)
-- **MCP Tool Service** - Provides local file operations and AI integration tools
-- **Multi-LLM Support** - Supports Anthropic, OpenAI, and more
-- **Import Support** - Import API definitions from Postman and Swagger
-- **Theme Switching** - Light/Dark theme with one-click toggle
-- **Internationalization** - Support for Chinese and English interfaces
-- **Request Logging** - Real-time recording and viewing of all requests
-- **Version Management** - Support for Mock version history and rollback
+### Core Features
+- **Contract-Driven** — OpenAPI/Swagger as the single source of truth
+- **Auto-Discovery** — Discover API specs from live backend `/api-docs` or static files
+- **Precise Mocking** — Schema-based Mock generation, 100% spec-compliant
+- **Type Generation** — Auto-generate TypeScript interfaces from contracts
+- **Version Management** — Contract versioning, change detection, diff & rollback
+
+### Mocking Capabilities
+- **Semantic Awareness** — Intelligent data generation based on field names (email, uuid, dates, etc.)
+- **Complex Types** — Supports allOf/oneOf/anyOf, $ref, nested objects
+- **Boundary Testing** — Auto-generates edge cases (empty arrays, null values, etc.)
+- **Multi-Format** — Supports OpenAPI 3.x and Swagger 2.0
+
+### User Experience
+- **Web UI** — Intuitive GUI for managing contracts and Mocks
+- **Real-time Updates** — WebSocket push for contract changes
+- **Internationalization** — Chinese and English interfaces
+- **Theme Switching** — Light/Dark theme
+
+### Developer Tools
+- **MCP Integration** — Model Context Protocol server for AI tool access
+- **REST API** — Full RESTful API for integration
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
 - [Development Setup](#development-setup)
-- [CLI Commands](#cli-commands)
 - [Web UI Guide](#web-ui-guide)
 - [AI Configuration](#ai-configuration)
 - [MCP Service](#mcp-service)
@@ -56,30 +65,23 @@
 npm install msw-auto
 # or
 pnpm add msw-auto
-# or
-yarn add msw-auto
 ```
 
-### Basic Usage
+### Start Services
 
 ```bash
-# Start interactive menu (recommended for first-time users)
-npx msw-auto
-
-# Or start server directly
+# Start backend Mock server (port 3001)
 npx msw-auto server
 
-# Start Web UI (requires separate terminal)
-npx msw-auto web
+# In a new terminal, start frontend Web UI (port 3000)
+cd web && pnpm install && pnpm dev
 ```
 
-Then visit http://localhost:3000 to use the Web UI.
+Then visit http://localhost:3000.
 
 ---
 
 ## Development Setup
-
-### Running from Source
 
 If you've cloned this repository:
 
@@ -90,15 +92,11 @@ pnpm install
 # 2. Install web frontend dependencies
 cd web && pnpm install && cd ..
 
-# 3. Development mode (starts both CLI and server)
-pnpm dev
+# 3. Start backend server
+pnpm dev:server   # port 3001
 
-# 4. Or start separately
-pnpm dev:server   # Start backend server (port 3001)
-pnpm dev:cli      # Start CLI interactive mode
-
-# 5. In a new terminal, start Web UI
-cd web && pnpm dev   # Start frontend (port 3000)
+# 4. In a new terminal, start frontend
+cd web && pnpm dev   # port 3000
 ```
 
 ### Service URLs
@@ -111,138 +109,6 @@ cd web && pnpm dev   # Start frontend (port 3000)
 
 ---
 
-## CLI Commands
-
-### Interactive Mode
-
-```bash
-npx msw-auto
-# or
-npx msw-auto interactive
-```
-
-Provides a graphical menu with options to:
-- Start/stop server
-- Launch Web UI
-- Configure LLM
-- View configuration
-- Exit
-
-### init - Initialize MSW
-
-```bash
-# Initialize to current directory
-npx msw-auto init
-
-# Specify public directory
-npx msw-auto init ./public
-
-# Save config to package.json
-npx msw-auto init --save
-```
-
-### server - Start Mock Server
-
-```bash
-# Use default port (3001)
-npx msw-auto server
-
-# Specify port
-npx msw-auto server --port 8080
-
-# Disable file watching
-npx msw-auto server --watch false
-```
-
-### web - Start Web UI
-
-```bash
-# Use default port (3000)
-npx msw-auto web
-
-# Specify port
-npx msw-auto web --port 8080
-```
-
-### generate - AI Generate Mock
-
-```bash
-# Basic usage
-npx msw-auto generate --prompt "User list API"
-
-# Specify output file
-npx msw-auto generate --prompt "Product catalog" --output ./mocks/products.ts
-
-# Short form
-npx msw-auto generate -p "Order API" -o ./mocks/orders.ts
-```
-
-### import - Import API Definitions
-
-```bash
-# Import Postman collection
-npx msw-auto import ./postman_collection.json
-
-# Import Swagger/OpenAPI
-npx msw-auto import ./swagger.yaml
-
-# Specify output directory
-npx msw-auto import ./api.json --output ./mocks
-```
-
-### config - View Configuration
-
-```bash
-# Show current LLM configuration
-npx msw-auto config
-```
-
-### setting - Configure LLM
-
-```bash
-# Set provider
-npx msw-auto setting --provider anthropic
-npx msw-auto setting --provider openai
-npx msw-auto setting --provider custom
-
-# Set API Key
-npx msw-auto setting --apikey sk-ant-xxx
-npx msw-auto setting --apikey sk-openai-xxx
-
-# Set custom Base URL
-npx msw-auto setting --provider custom --baseurl https://api.example.com/v1
-```
-
-### model - Switch Model
-
-```bash
-# Switch Claude model
-npx msw-auto model claude-3-5-sonnet-20241022
-npx msw-auto model claude-3-opus-20240229
-
-# Switch GPT model
-npx msw-auto model gpt-4o
-npx msw-auto model gpt-4-turbo
-```
-
-### mcp - Start MCP Server
-
-```bash
-npx msw-auto mcp
-```
-
-### Language Switch
-
-```bash
-# Chinese interface
-npx msw-auto --lang zh
-
-# English interface
-npx msw-auto --lang en
-```
-
----
-
 ## Web UI Guide
 
 ### 1. Dashboard
@@ -250,15 +116,10 @@ npx msw-auto --lang en
 Visit http://localhost:3000/dashboard
 
 **Features**:
-- View Mock statistics overview (total, enabled, today's requests)
-- View recent request logs
-- Global toggle control (enable/disable all Mocks with one click)
+- Mock statistics overview (total, enabled, today's requests)
+- Recent request logs
+- Global toggle control (enable/disable all Mocks)
 - Quick create new Mock
-
-**Actions**:
-- Click global toggle button to switch all Mock status
-- Click "Create Mock" button to add new Mock
-- Request logs update in real-time, showing recent API calls
 
 ### 2. API Explorer
 
@@ -267,14 +128,8 @@ Visit http://localhost:3000/explorer
 **Features**:
 - Browse all configured Mock APIs
 - Filter by method, path
-- View detailed information for each Mock
+- View detailed Mock information
 - Create Mock from actual requests
-
-**Actions**:
-- Use search box to quickly find APIs
-- Click API card to view details
-- Click "Enable/Disable" to toggle individual Mock
-- Click "Edit" to modify Mock configuration
 
 ### 3. Mock Editor
 
@@ -284,16 +139,16 @@ Visit http://localhost:3000/mocks
 - Visual Mock creation and editing
 - JSON editor support
 - Request/response configuration
-- Delay simulation settings
+- Delay simulation
 
 **Configuration Options**:
 - **Name**: Mock display name
 - **Method**: HTTP method (GET/POST/PUT/DELETE, etc.)
-- **Path**: Request path, supports parameters (e.g., `/api/users/:id`)
+- **Path**: Request path with parameter support (e.g., `/api/users/:id`)
 - **Status Code**: Response status code (default 200)
 - **Headers**: Custom response headers
 - **Response Body**: JSON response data
-- **Delay**: Simulate network delay (milliseconds)
+- **Delay**: Simulate network delay (ms)
 - **Tags**: Category tags
 - **Description**: Detailed description
 
@@ -303,13 +158,8 @@ Visit http://localhost:3000/docs
 
 **Features**:
 - AI auto-generates API documentation
-- One-click copy documentation content
-- Markdown format export
-
-**Actions**:
-- Select Mock and click "Generate Documentation"
-- AI automatically analyzes and generates documentation
-- Click "Copy" button to copy documentation
+- One-click copy
+- Markdown export
 
 ### 5. Settings
 
@@ -320,12 +170,6 @@ Visit http://localhost:3000/settings
 - Theme switching (Light/Dark)
 - Language switching (Chinese/English)
 - Server connection settings
-
-**LLM Configuration**:
-- Select provider (Anthropic/OpenAI/Custom)
-- Enter API Key
-- Configure Base URL (for custom provider)
-- Select model
 
 ---
 
@@ -339,37 +183,14 @@ Visit http://localhost:3000/settings
 | OpenAI | gpt-4o | https://api.openai.com/v1 |
 | Custom | - | User specified |
 
-### Configuration Steps
-
-#### 1. Configure via CLI
-
-```bash
-# Anthropic Claude
-npx msw-auto setting --provider anthropic --apikey sk-ant-xxx
-
-# OpenAI
-npx msw-auto setting --provider openai --apikey sk-xxx
-
-# Custom API
-npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --apikey your-key
-```
-
-#### 2. Configure via Web UI
+### Configuration via Web UI (Recommended)
 
 1. Visit http://localhost:3000/settings
 2. In the LLM configuration section:
    - Select provider
    - Enter API Key
-   - Configure Base URL (if needed)
+   - Configure Base URL (for custom provider)
    - Click "Save Configuration"
-
-#### 3. Verify Configuration
-
-```bash
-npx msw-auto config
-```
-
-Or visit http://localhost:3000/settings to view configuration status.
 
 ### AI Features Usage
 
@@ -384,15 +205,15 @@ Or visit http://localhost:3000/settings to view configuration status.
 
 1. Open existing Mock edit page
 2. Click "AI Improve" button
-3. Enter improvement requirements, e.g., "Add more fields and more realistic data"
+3. Enter improvement requirements
 4. AI automatically optimizes Mock configuration
 
 #### Generate Documentation
 
-1. Select a Mock from the Mock list
+1. Select a Mock from the list
 2. Click "Generate Documentation" button
-3. AI automatically generates API documentation
-4. Copy or export documentation
+3. AI generates API documentation
+4. Copy or export
 
 ---
 
@@ -400,7 +221,7 @@ Or visit http://localhost:3000/settings to view configuration status.
 
 MCP (Model Context Protocol) server allows any MCP-compatible LLM tool to directly call MSW Auto features.
 
-### MCP Tools List
+### MCP Tools
 
 #### File Operation Tools
 
@@ -425,8 +246,6 @@ MCP (Model Context Protocol) server allows any MCP-compatible LLM tool to direct
 
 ### Configure MCP
 
-Configure in Claude Desktop or other MCP-compatible applications:
-
 ```json
 {
   "mcpServers": {
@@ -448,7 +267,7 @@ Please analyze my frontend project and generate Mocks for all APIs
 Claude will automatically call MCP tools to:
 1. Analyze project structure
 2. Identify all API calls
-3. Generate corresponding Mock data
+3. Generate Mock data
 4. Start Mock server
 
 ---
@@ -534,7 +353,7 @@ ANTHROPIC_API_KEY=sk-ant-xxx # Claude API key
 OPENAI_API_KEY=sk-xxx        # OpenAI API key
 
 # Database configuration
-DB_PATH=./data/mocks.db      # SQLite database path
+DB_PATH=./data/mocks.db     # SQLite database path
 
 # Proxy configuration
 BACKEND_URL=https://api.example.com  # Backend API URL (for proxy)
@@ -558,12 +377,12 @@ Configuration is saved in `data/config.json`:
 
 ### Database
 
-Uses SQLite to store Mock data, file location: `data/mocks.db`
+SQLite storage at `data/mocks.db`.
 
-**Data Tables**:
-- `mocks` - Mock configurations
-- `request_logs` - Request logs
-- `mock_versions` - Version history
+**Tables**:
+- `mocks` — Mock configurations
+- `request_logs` — Request logs
+- `mock_versions` — Version history
 
 ---
 
@@ -574,37 +393,26 @@ Uses SQLite to store Mock data, file location: `data/mocks.db`
 │                        MSW Auto                              │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│   ┌─────────────┐    ┌─────────────┐                        │
-│   │   CLI       │    │   Web UI    │                        │
-│   │  (Terminal) │    │  (React)    │                        │
-│   └──────┬──────┘    └──────┬──────┘                        │
-│          │                  │                                │
-│          └──────────┬───────┘                                │
-│                     ▼                                        │
-│   ┌─────────────────────────────────────┐                   │
-│   │         Express Server              │                   │
-│   │         (Port 3001)                 │                   │
-│   ├─────────────────────────────────────┤                   │
-│   │  ┌─────────────┐  ┌──────────────┐ │                   │
-│   │  │ Mock Manager│  │ Claude Client│ │                   │
-│   │  │  (Mock Mgmt)│  │  (AI Integ)  │ │                   │
-│   │  └──────┬──────┘  └──────┬───────┘ │                   │
-│   │         │                │          │                   │
-│   │  ┌──────▼──────┐  ┌──────▼───────┐ │                   │
-│   │  │  Database   │  │   WebSocket  │ │                   │
-│   │  │  (SQLite)   │  │  (Real-time) │ │                   │
-│   │  └─────────────┘  └──────────────┘ │                   │
-│   └─────────────────────────────────────┘                   │
-│                     │                                        │
-│                     ▼                                        │
-│   ┌─────────────────────────────────────┐                   │
-│   │         MCP Server                  │                   │
-│   │    (Model Context Protocol)         │                   │
-│   │                                     │                   │
-│   │  • File Operation Tools             │                   │
-│   │  • Project Analysis Tools           │                   │
-│   │  • Mock Generation Tools            │                   │
-│   └─────────────────────────────────────┘                   │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐   │
+│   │   Web UI    │    │   REST API  │    │ MCP Server  │   │
+│   │  (React)   │    │   /api/*    │    │   (MCP)     │   │
+│   └──────┬──────┘    └──────┬──────┘    └──────┬──────┘   │
+│          │                   │                   │            │
+│          └───────────────────┼───────────────────┘            │
+│                              ▼                                  │
+│   ┌─────────────────────────────────────────────────────────┐  │
+│   │              Express Server (Port 3001)                │  │
+│   │                                                         │  │
+│   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │  │
+│   │  │Mock Manager │  │Contract Mgr │  │Claude Client│   │  │
+│   │  │  (mock/)   │  │(contract/)  │  │ (llm/)      │   │  │
+│   │  └─────────────┘  └─────────────┘  └─────────────┘   │  │
+│   │                                                         │  │
+│   │  ┌─────────────┐  ┌─────────────────────────────────┐  │  │
+│   │  │  Database   │  │          WebSocket             │  │  │
+│   │  │  (SQLite)   │  │        (Real-time)             │  │  │
+│   │  └─────────────┘  └─────────────────────────────────┘  │  │
+│   └─────────────────────────────────────────────────────────┘  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -616,7 +424,6 @@ Uses SQLite to store Mock data, file location: `data/mocks.db`
 - **Database**: SQLite (better-sqlite3)
 - **Real-time**: WebSocket (ws)
 - **AI Integration**: Anthropic Claude SDK
-- **CLI**: yargs + inquirer
 - **Build**: tsup + esbuild
 
 ---
@@ -625,36 +432,27 @@ Uses SQLite to store Mock data, file location: `data/mocks.db`
 
 ### Q: How to reset configuration?
 
-```bash
-# Delete configuration file
-rm data/config.json
-
-# Reconfigure
-npx msw-auto setting --provider anthropic --apikey your-key
-```
+Delete `data/config.json` and restart the server, then reconfigure via Web UI at http://localhost:3000/settings.
 
 ### Q: Where is data stored?
 
-All data is stored in the `data/` directory:
-- `mocks.db` - SQLite database
-- `config.json` - Configuration file
+- `data/mocks.db` — SQLite database
+- `data/config.json` — Configuration file
 
 ### Q: How to backup Mock data?
 
 ```bash
-# Method 1: Export JSON
+# Export JSON
 curl http://localhost:3001/api/export/json > mocks-backup.json
 
-# Method 2: Copy database
+# Copy database
 cp data/mocks.db data/mocks-backup.db
 ```
 
 ### Q: Port already in use?
 
 ```bash
-# Use different ports
-npx msw-auto server --port 8080
-npx msw-auto web --port 8081
+PORT=8080 npx msw-auto server
 ```
 
 ---
