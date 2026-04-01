@@ -185,12 +185,20 @@
     "results": "验证结果",
     "noResults": "未发现 API 调用",
     "matched": "匹配",
-    "missing": "路径缺失",
+    "missing": "前端调了但契约没有",
     "typeMismatch": "类型不匹配",
     "methodMismatch": "方法不匹配",
+    "fieldMismatch": "字段不匹配",
+    "uncovered": "契约定义了但前端没调用",
+    "unknown": "无法静态分析",
     "total": "总计",
     "warnings": "警告",
     "warningsTitle": "解析警告",
-    "moreWarnings": "更多警告..."
+    "moreWarnings": "更多警告...",
+    "filesScanned": "扫描文件",
+    "duration": "耗时",
+    "detectedLibraries": "检测到的库",
+    "errorsTitle": "扫描错误",
+    "moreErrors": "更多错误..."
   }
 }
