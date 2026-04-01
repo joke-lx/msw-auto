@@ -19,14 +19,6 @@
 
 > **API 契约驱动的智能 Mock 服务器** - 基于 OpenAPI/Swagger 规范自动生成 100% 符合约的 Mock 数据，配备 TypeScript 类型自动生成。
 
-## ✨ v3.0 重大更新
-
-- 🎯 **契约驱动开发** - OpenAPI/Swagger 作为唯一真实来源
-- 🔄 **自动发现契约** - 从运行中的后端或静态文件自动发现 API 规范
-- 📊 **Schema 精确 Mock** - 100% 符合 OpenAPI Schema 的 Mock 数据
-- 🔷 **类型自动生成** - 从契约自动生成 TypeScript 接口定义
-- 🏗️ **精简架构** - 删除冗余代码，使用官方 MSW 包，代码量减少 60%
-
 ## 特性
 
 ### 核心功能
@@ -50,14 +42,12 @@
 
 ### 开发者工具
 - **MCP 集成** - Model Context Protocol 服务器，支持 AI 工具调用
-- **CLI 工具** - 命令行界面，支持自动化脚本
 - **API 接口** - RESTful API，易于集成
 
 ## 目录
 
 - [快速开始](#快速开始)
 - [开发环境运行](#开发环境运行)
-- [CLI 命令详解](#cli-命令详解)
 - [Web UI 使用指南](#web-ui-使用指南)
 - [AI 功能配置](#ai-功能配置)
 - [MCP 服务](#mcp-服务)
@@ -75,21 +65,16 @@
 npm install msw-auto
 # 或
 pnpm add msw-auto
-# 或
-yarn add msw-auto
 ```
 
-### 基础使用
+### 启动服务
 
 ```bash
-# 启动交互式菜单（推荐首次使用）
-npx msw-auto
-
-# 或直接启动服务器
+# 启动后端 Mock 服务器（端口 3001）
 npx msw-auto server
 
-# 启动 Web UI（需要单独终端）
-npx msw-auto web
+# 在新终端启动前端 Web UI（端口 3000）
+cd web && pnpm install && pnpm dev
 ```
 
 然后访问 http://localhost:3000 使用 Web UI。
@@ -97,8 +82,6 @@ npx msw-auto web
 ---
 
 ## 开发环境运行
-
-### 从源码运行
 
 如果你克隆了此仓库，可以这样运行：
 
@@ -109,15 +92,11 @@ pnpm install
 # 2. 安装 web 前端依赖
 cd web && pnpm install && cd ..
 
-# 3. 开发模式（同时启动 CLI 和服务器）
-pnpm dev
+# 3. 启动后端服务器
+pnpm dev:server   # 端口 3001
 
-# 4. 或分别启动
-pnpm dev:server   # 启动后端服务器 (端口 3001)
-pnpm dev:cli      # 启动 CLI 交互模式
-
-# 5. 在新终端启动 Web UI
-cd web && pnpm dev   # 启动前端 (端口 3000)
+# 4. 在新终端启动前端
+cd web && pnpm dev   # 端口 3000
 ```
 
 ### 服务地址
@@ -127,138 +106,6 @@ cd web && pnpm dev   # 启动前端 (端口 3000)
 | Web UI | http://localhost:3000 | React 前端界面 |
 | Mock Server | http://localhost:3001 | Express 后端服务 |
 | WebSocket | ws://localhost:3001/ws | 实时更新 |
-
----
-
-## CLI 命令详解
-
-### 交互式模式
-
-```bash
-npx msw-auto
-# 或
-npx msw-auto interactive
-```
-
-提供图形化菜单，支持以下操作：
-- 启动/停止服务器
-- 启动 Web UI
-- 配置 LLM
-- 查看配置
-- 退出
-
-### init - 初始化 MSW
-
-```bash
-# 默认初始化到当前目录
-npx msw-auto init
-
-# 指定公共目录
-npx msw-auto init ./public
-
-# 保存配置到 package.json
-npx msw-auto init --save
-```
-
-### server - 启动 Mock 服务器
-
-```bash
-# 使用默认端口 (3001)
-npx msw-auto server
-
-# 指定端口
-npx msw-auto server --port 8080
-
-# 关闭文件监听
-npx msw-auto server --watch false
-```
-
-### web - 启动 Web UI
-
-```bash
-# 使用默认端口 (3000)
-npx msw-auto web
-
-# 指定端口
-npx msw-auto web --port 8080
-```
-
-### generate - AI 生成 Mock
-
-```bash
-# 基础用法
-npx msw-auto generate --prompt "用户列表 API"
-
-# 指定输出文件
-npx msw-auto generate --prompt "商品目录" --output ./mocks/products.ts
-
-# 简写形式
-npx msw-auto generate -p "订单接口" -o ./mocks/orders.ts
-```
-
-### import - 导入 API 定义
-
-```bash
-# 导入 Postman collection
-npx msw-auto import ./postman_collection.json
-
-# 导入 Swagger/OpenAPI
-npx msw-auto import ./swagger.yaml
-
-# 指定输出目录
-npx msw-auto import ./api.json --output ./mocks
-```
-
-### config - 查看配置
-
-```bash
-# 显示当前 LLM 配置
-npx msw-auto config
-```
-
-### setting - 配置 LLM
-
-```bash
-# 设置提供商
-npx msw-auto setting --provider anthropic
-npx msw-auto setting --provider openai
-npx msw-auto setting --provider custom
-
-# 设置 API Key
-npx msw-auto setting --apikey sk-ant-xxx
-npx msw-auto setting --apikey sk-openai-xxx
-
-# 设置自定义 Base URL
-npx msw-auto setting --provider custom --baseurl https://api.example.com/v1
-```
-
-### model - 切换模型
-
-```bash
-# 切换 Claude 模型
-npx msw-auto model claude-3-5-sonnet-20241022
-npx msw-auto model claude-3-opus-20240229
-
-# 切换 GPT 模型
-npx msw-auto model gpt-4o
-npx msw-auto model gpt-4-turbo
-```
-
-### mcp - 启动 MCP 服务器
-
-```bash
-npx msw-auto mcp
-```
-
-### 语言切换
-
-```bash
-# 中文界面
-npx msw-auto --lang zh
-
-# 英文界面
-npx msw-auto --lang en
-```
 
 ---
 
@@ -360,20 +207,7 @@ npx msw-auto --lang en
 
 ### 配置步骤
 
-#### 1. 使用 CLI 配置
-
-```bash
-# Anthropic Claude
-npx msw-auto setting --provider anthropic --apikey sk-ant-xxx
-
-# OpenAI
-npx msw-auto setting --provider openai --apikey sk-xxx
-
-# 自定义 API
-npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --apikey your-key
-```
-
-#### 2. 使用 Web UI 配置
+#### 使用 Web UI 配置（推荐）
 
 1. 访问 http://localhost:3000/settings
 2. 在 LLM 配置区域：
@@ -381,14 +215,6 @@ npx msw-auto setting --provider custom --baseurl https://api.example.com/v1 --ap
    - 输入 API Key
    - 配置 Base URL（如需要）
    - 点击"保存配置"
-
-#### 3. 验证配置
-
-```bash
-npx msw-auto config
-```
-
-或访问 http://localhost:3000/settings 查看配置状态。
 
 ### AI 功能使用
 
@@ -596,8 +422,8 @@ BACKEND_URL=https://api.example.com  # 后端 API 地址（用于代理）
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                  │
-│  │     CLI      │    │   MCP Server │    │   Web UI     │                  │
-│  │  (cli/index) │    │ (src/mcp/)   │    │  (web/src/)  │                  │
+│  │   MCP Server │    │   Web UI     │    │   REST API   │                  │
+│  │  (src/mcp/)  │    │  (web/src/)  │    │  /api/*      │                  │
 │  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘                  │
 │         │                   │                    │                            │
 │         └───────────────────┼────────────────────┘                        │
@@ -649,38 +475,28 @@ src/
 │
 ├── mcp/                      # MCP 服务器
 │   ├── server.ts             # MCP 主服务器
-│   ├── analyzer.ts           # 项目分析器
-│   ├── llm-service.ts        # LLM 服务
-│   ├── ast/                  # AST 分析引擎
-│   └── openapi/             # OpenAPI 解析器
+│   ├── analyzer.ts            # 项目分析器
+│   ├── llm-service.ts         # LLM 服务
+│   ├── ast/                   # AST 分析引擎
+│   └── openapi/               # OpenAPI 解析器
 │
 ├── types/                    # 类型定义
 │   ├── config.ts
 │   ├── contract.ts
 │   └── index.ts
 │
-└── cli/                      # CLI 入口
+web/src/                      # React 前端
+│   ├── pages/
+│   │   ├── Dashboard/         # 仪表盘
+│   │   ├── APIExplorer/      # API 浏览器
+│   │   ├── MockEditor/        # Mock 编辑器
+│   │   ├── Documentation/     # 文档生成
+│   │   └── Settings/          # 设置
+│   ├── components/            # 通用组件
+│   ├── stores/                # 状态管理
+│   ├── api/                   # API 客户端
+│   └── i18n/                  # 国际化
 ```
-
-### 服务地址
-
-| 服务 | 地址 | 说明 |
-|------|------|------|
-| Web UI | http://localhost:3000 | React 前端界面 |
-| Mock Server | http://localhost:3001 | Express 后端服务 |
-| WebSocket | ws://localhost:3001/ws | 实时更新 |
-
-### 契约管理 API
-
-| 方法 | 路由 | 功能 |
-|------|------|------|
-| `GET` | `/api/contracts` | 获取所有契约 |
-| `POST` | `/api/contracts` | 创建契约 |
-| `GET` | `/api/contracts/:id` | 获取单个契约 |
-| `DELETE` | `/api/contracts/:id` | 删除契约 |
-| `POST` | `/api/contracts/discover` | 自动发现契约 |
-| `GET` | `/api/contracts/:id/mocks` | 生成 Mock 数据 |
-| `GET` | `/api/contracts/:id/types` | 生成 TS 类型 |
 
 ### 技术栈
 
@@ -689,7 +505,6 @@ src/
 - **数据库**: SQLite (better-sqlite3)
 - **实时通信**: WebSocket (ws)
 - **AI 集成**: Anthropic Claude SDK
-- **CLI**: yargs + inquirer
 - **构建**: tsup + esbuild
 
 ---
@@ -698,13 +513,7 @@ src/
 
 ### Q: 如何重置配置？
 
-```bash
-# 删除配置文件
-rm data/config.json
-
-# 重新配置
-npx msw-auto setting --provider anthropic --apikey your-key
-```
+在 Web UI 设置页面重新配置 LLM，或删除 `data/config.json` 后重启服务器。
 
 ### Q: 数据存储在哪里？
 
@@ -724,10 +533,10 @@ cp data/mocks.db data/mocks-backup.db
 
 ### Q: 端口被占用怎么办？
 
+设置环境变量使用不同端口：
+
 ```bash
-# 使用不同端口启动
-npx msw-auto server --port 8080
-npx msw-auto web --port 8081
+PORT=8080 WEB_PORT=8081 npx msw-auto server
 ```
 
 ---

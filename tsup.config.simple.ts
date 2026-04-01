@@ -2,7 +2,8 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: {
-    'cli/index': 'cli/index.js',
+    // TODO: 'cli/index' removed — CLI is being removed
+    // 'cli/index': 'cli/index.js',
     'server/index': 'src/server/index.ts',
     'mcp/server': 'src/mcp/server.ts',
   },
@@ -18,16 +19,17 @@ export default defineConfig({
     'typescript',
     '@anthropic-ai/sdk',
     '@modelcontextprotocol/sdk',
-    '@inquirer/*',
-    'chalk',
-    'ora',
-    'picocolors',
-    'yargs',
+    // TODO: @inquirer/*, chalk, ora, picocolors, yargs, cli-progress, clui removed — CLI is being removed
+    // '@inquirer/*',
+    // 'chalk',
+    // 'ora',
+    // 'picocolors',
+    // 'yargs',
     'express',
     'cors',
     'ws',
     'better-sqlite3',
-    'cli-progress',
-    'clui',
+    // 'cli-progress',
+    // 'clui',
   ],
 })
