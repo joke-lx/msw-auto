@@ -3,11 +3,8 @@
  */
 
 import express from 'express'
-import { ASTEngine } from '../../mcp/ast/engine.js'
 import type { ContractManager } from '../../contract/manager.js'
 import type { Database } from '../storage/database.js'
-
-const astEngine = new ASTEngine()
 
 export function setupContractRoutes(
   app: express.Application,
@@ -230,25 +227,19 @@ export function setupContractRoutes(
         return res.status(400).json({ error: 'frontendPath is required' })
       }
 
-      const contract = await contractManager.findById(req.params.id)
-      if (!contract) {
-        return res.status(404).json({ error: 'Contract not found' })
-      }
-
-      if (!contract.spec?.paths) {
-        return res.status(400).json({ error: 'Contract has no OpenAPI spec' })
-      }
-
-      // 分析前端目录
-      const analysisResult = await astEngine.analyzeDirectory(frontendPath)
-
-      // 对比契约
-      const validationResult = contractManager.validate(req.params.id, analysisResult)
+      // 使用新的 FrontendApiExtractor 进行验证
+      const validationResult = await contractManager.validateFrontend(req.params.id, frontendPath)
 
       res.json(validationResult)
     } catch (error: any) {
-      if (error.code === 'ENOENT' || error.message.includes('no such file')) {
+      if (error.code === 'ENOENT' || error.message.includes('no such file') || error.message.includes('ENOENT')) {
         return res.status(400).json({ error: '路径不存在，请检查路径是否正确' })
+      }
+      if (error.message === 'Contract not found') {
+        return res.status(404).json({ error: 'Contract not found' })
+      }
+      if (error.message === 'Contract has no OpenAPI spec') {
+        return res.status(400).json({ error: 'Contract has no OpenAPI spec' })
       }
       res.status(500).json({ error: error.message })
     }

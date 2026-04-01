@@ -17,8 +17,12 @@ import type {
   ContractDiff,
 } from '../types/index.js'
 import type { AnalysisResult } from '../../mcp/ast/engine.js'
+import { FrontendApiExtractor } from '../../mcp/ast/FrontendApiExtractor.js'
+import { OpenApiPathMatcher } from '../../mcp/ast/matcher/OpenApiPathMatcher.js'
+import { FieldValidator } from '../../mcp/ast/matcher/FieldValidator.js'
+import type { ApiCall } from '../../mcp/ast/types/frontendApiCall.js'
 
-export type VerificationStatus = 'matched' | 'missing' | 'typeMismatch' | 'methodMismatch'
+export type VerificationStatus = 'matched' | 'missing' | 'typeMismatch' | 'methodMismatch' | 'uncovered'
 
 export interface VerificationResult {
   method: string
@@ -26,8 +30,112 @@ export interface VerificationResult {
   status: VerificationStatus
   detail: string
   file?: string
+  library?: string
 }
 
+/**
+ * 新的验证响应结构（前端调用 vs 契约）
+ */
+export interface FrontendValidationResult {
+  contractId: string
+  status: 'done' | 'error'
+
+  // 前端调了，契约也有
+  matched: MatchedCall[]
+  // 前端调了，但契约没有定义
+  missing: MissingCall[]
+  // 方法不匹配
+  methodMismatch: MethodMismatchCall[]
+  // 字段不匹配
+  fieldMismatch: FieldMismatchCall[]
+
+  // 契约定义了，但前端没调用
+  uncovered: UncoveredEndpoint[]
+
+  // 无法静态分析的调用（需要运行时验证）
+  unknown: UnknownCall[]
+
+  summary: ValidationSummary
+  meta: ValidationMeta
+  errors: { file: string; message: string }[]
+  // 解析警告（如框架无法识别、文件跳过等）
+  warnings: { file: string; library: string; message: string }[]
+}
+
+export interface MatchedCall {
+  method: string
+  path: string
+  normalizedPath: string
+  specPath: string
+  file: string
+  library: string
+  line: number
+}
+
+export interface MissingCall {
+  method: string
+  path: string
+  normalizedPath: string
+  file: string
+  library: string
+  line: number
+}
+
+export interface MethodMismatchCall {
+  method: string
+  path: string
+  frontendMethod: string
+  specMethods: string[]
+  file: string
+  library: string
+  line: number
+}
+
+export interface FieldMismatchCall {
+  method: string
+  path: string
+  missingFields: string[]
+  extraFields: string[]
+  file: string
+  library: string
+  line: number
+}
+
+export interface UncoveredEndpoint {
+  method: string
+  path: string
+  operationId?: string
+  missing: 'not_called' | 'partially_called'
+}
+
+export interface UnknownCall {
+  method: string
+  rawPath: string
+  file: string
+  library: string
+  line: number
+  reason: string
+}
+
+export interface ValidationSummary {
+  total: number
+  matched: number
+  missing: number
+  methodMismatch: number
+  fieldMismatch: number
+  uncovered: number
+  unknown: number
+}
+
+export interface ValidationMeta {
+  filesScanned: number
+  duration: number
+  detectedLibraries: string[]
+}
+
+/**
+ * @deprecated Use FrontendValidationResult
+ */
 export interface ValidationResponse {
   contractId: string
   status: 'done' | 'error'
@@ -326,6 +434,171 @@ export class ContractManager {
   /**
    * 验证前端代码中的 API 调用是否符合契约
    */
+  /**
+   * 验证前端代码中的 API 调用是否符合契约
+   *
+   * @param contractId 契约 ID
+   * @param frontendPath 前端代码目录路径
+   * @returns 前端 API 调用与契约的对比结果
+   */
+  async validateFrontend(contractId: string, frontendPath: string): Promise<FrontendValidationResult> {
+    const contract = this.contracts.get(contractId)
+    if (!contract) {
+      throw new Error('Contract not found')
+    }
+
+    if (!contract.spec?.paths) {
+      throw new Error('Contract has no OpenAPI spec')
+    }
+
+    // 提取前端 API 调用
+    const extractor = new FrontendApiExtractor()
+    const extractResult = await extractor.extract(frontendPath)
+
+    const specPaths = contract.spec.paths
+    const pathMatcher = new OpenApiPathMatcher()
+    const fieldValidator = new FieldValidator()
+
+    // 展开 spec 中的所有端点
+    const specEndpoints = pathMatcher.expandSpecPaths(specPaths)
+
+    // 用于跟踪哪些契约端点被前端调用了
+    const uncoveredEndpoints = new Map<string, UncoveredEndpoint>()
+    for (const endpoint of specEndpoints) {
+      uncoveredEndpoints.set(`${endpoint.method}:${endpoint.path}`, {
+        method: endpoint.method,
+        path: endpoint.path,
+        operationId: endpoint.operationId,
+        missing: 'not_called',
+      })
+    }
+
+    // 对比结果
+    const matched: MatchedCall[] = []
+    const missing: MissingCall[] = []
+    const methodMismatch: MethodMismatchCall[] = []
+    const fieldMismatch: FieldMismatchCall[] = []
+    const unknown: UnknownCall[] = []
+
+    for (const call of extractResult.calls) {
+      if (!call.staticallyResolved) {
+        unknown.push({
+          method: call.method,
+          rawPath: call.rawPath,
+          file: call.location.file,
+          library: call.library,
+          line: call.location.line,
+          reason: call.unresolvedReason || 'dynamic path cannot be statically resolved',
+        })
+        continue
+      }
+
+      // 使用路径匹配器
+      const matchResult = pathMatcher.match(call.rawPath, specPaths)
+
+      if (!matchResult) {
+        // 路径在 spec 中不存在
+        missing.push({
+          method: call.method,
+          path: call.rawPath,
+          normalizedPath: call.normalizedPath,
+          file: call.location.file,
+          library: call.library,
+          line: call.location.line,
+        })
+        continue
+      }
+
+      // 检查 HTTP 方法
+      const specMethods = this.getSpecMethods(matchResult.specPath, specPaths)
+      const normalizedSpecMethod = call.method.toUpperCase()
+
+      if (!specMethods.includes(normalizedSpecMethod)) {
+        // 方法不匹配
+        methodMismatch.push({
+          method: matchResult.specPath,
+          path: call.rawPath,
+          frontendMethod: call.method,
+          specMethods,
+          file: call.location.file,
+          library: call.library,
+          line: call.location.line,
+        })
+
+        // 标记为已覆盖
+        uncoveredEndpoints.delete(`${normalizedSpecMethod}:${matchResult.specPath}`)
+        continue
+      }
+
+      // 匹配成功
+      matched.push({
+        method: call.method,
+        path: call.rawPath,
+        normalizedPath: call.normalizedPath,
+        specPath: matchResult.specPath,
+        file: call.location.file,
+        library: call.library,
+        line: call.location.line,
+      })
+
+      // 字段级校验
+      const specEndpoint = specPaths[matchResult.specPath]?.[call.method.toLowerCase()]
+      if (specEndpoint) {
+        const fieldResult = fieldValidator.validateApiCall(call, specEndpoint)
+
+        if (!fieldResult.valid || fieldResult.typeMismatch.length > 0) {
+          fieldMismatch.push({
+            method: call.method,
+            path: call.rawPath,
+            missingFields: fieldResult.missingFields.map((f) => f.name),
+            extraFields: fieldResult.extraFields.map((f) => f.name),
+            file: call.location.file,
+            library: call.library,
+            line: call.location.line,
+          })
+        }
+      }
+
+      // 标记为已覆盖
+      uncoveredEndpoints.delete(`${call.method}:${matchResult.specPath}`)
+    }
+
+    // 收集未覆盖的端点
+    const uncovered = Array.from(uncoveredEndpoints.values())
+
+    const summary: ValidationSummary = {
+      total: extractResult.calls.length,
+      matched: matched.length,
+      missing: missing.length,
+      methodMismatch: methodMismatch.length,
+      fieldMismatch: fieldMismatch.length,
+      uncovered: uncovered.length,
+      unknown: unknown.length,
+    }
+
+    return {
+      contractId,
+      status: 'done',
+      matched,
+      missing,
+      methodMismatch,
+      fieldMismatch,
+      uncovered,
+      unknown,
+      summary,
+      meta: {
+        filesScanned: extractResult.meta.filesScanned,
+        duration: extractResult.meta.duration,
+        detectedLibraries: extractResult.meta.detectedLibraries,
+      },
+      errors: extractResult.errors.map((e) => ({ file: e.file, message: e.message })),
+      warnings: extractResult.warnings.map((w) => ({ file: w.file, library: w.library, message: w.message })),
+    }
+  }
+
+  /**
+   * @deprecated Use validateFrontend instead
+   */
   validate(contractId: string, analysisResult: AnalysisResult): ValidationResponse {
     const contract = this.contracts.get(contractId)
     if (!contract) {
@@ -381,7 +654,6 @@ export class ContractManager {
 
     // 从 analysisResult.errors 中提取 warnings
     const warnings: { file: string; framework: string; message: string }[] = []
-    // analysisResult 本身不直接包含 warnings，但我们可以从 errors 中提取
 
     return {
       contractId,
@@ -458,6 +730,25 @@ export class ContractManager {
       '^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
     )
     return regex.test(path)
+  }
+
+  /**
+   * 获取 spec 中某个路径支持的所有 HTTP 方法
+   */
+  private getSpecMethods(path: string, specPaths: Record<string, any>): string[] {
+    const pathSpec = specPaths[path]
+    if (!pathSpec) return []
+
+    const httpMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']
+    const methods: string[] = []
+
+    for (const method of httpMethods) {
+      if (pathSpec[method.toLowerCase()]) {
+        methods.push(method)
+      }
+    }
+
+    return methods
   }
 
   /**

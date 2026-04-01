@@ -184,12 +184,20 @@
     "results": "Validation Results",
     "noResults": "No API calls found",
     "matched": "Matched",
-    "missing": "Path Missing",
+    "missing": "Missing in Contract",
     "typeMismatch": "Type Mismatch",
     "methodMismatch": "Method Mismatch",
+    "fieldMismatch": "Field Mismatch",
+    "uncovered": "Not Called by Frontend",
+    "unknown": "Cannot Analyze Statically",
     "total": "Total",
     "warnings": "Warnings",
     "warningsTitle": "Parse Warnings",
-    "moreWarnings": "more warnings..."
+    "moreWarnings": "more warnings...",
+    "filesScanned": "Files Scanned",
+    "duration": "Duration",
+    "detectedLibraries": "Detected Libraries",
+    "errorsTitle": "Scan Errors",
+    "moreErrors": "more errors..."
   }
 }
