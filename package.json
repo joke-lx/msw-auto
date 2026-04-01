@@ -11,9 +11,10 @@
       "msw"
     ]
   },
-  "bin": {
-    "msw-auto": "dist/cli/index.js"
-  },
+  // TODO: CLI entry removed — CLI is being removed
+  // "bin": {
+  //   "msw-auto": "dist/cli/index.js"
+  // },
   "files": [
     "dist"
   ],
@@ -24,14 +25,16 @@
     "node": ">=18"
   },
   "scripts": {
-    "dev": "concurrently \"pnpm dev:cli\" \"pnpm dev:server\"",
+    "dev": "concurrently \"pnpm dev:server\"",
     "dev:server": "tsx watch src/server/index.ts",
-    "dev:cli": "node --watch cli/index.js",
+    // TODO: dev:cli removed — CLI is being removed
+    // "dev:cli": "node --watch cli/index.js",
     "clean": "rimraf ./dist",
     "build": "pnpm clean && tsup --config tsup.config.simple.ts",
     "test": "vitest",
     "server": "tsx src/server/index.ts",
-    "cli": "node cli/index.js",
+    // TODO: cli removed — CLI is being removed
+    // "cli": "node cli/index.js",
     "mcp": "tsx src/mcp/server.ts"
   },
   "homepage": "https://msw-auto.dev",
@@ -45,32 +48,37 @@
     "@anthropic-ai/sdk": "^0.37.0",
     "@babel/parser": "^7.26.3",
     "@babel/traverse": "^7.26.5",
-    "@inquirer/confirm": "^5.0.0",
-    "@inquirer/input": "^5.0.0",
-    "@inquirer/select": "^5.0.0",
+    // TODO: @inquirer/* removed — CLI is being removed
+    // "@inquirer/confirm": "^5.0.0",
+    // "@inquirer/input": "^5.0.0",
+    // "@inquirer/select": "^5.0.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "11.8.1",
-    "chalk": "^5.3.0",
-    "cli-progress": "^3.12.0",
-    "clui": "^0.3.6",
+    // TODO: chalk, cli-progress, clui, ora, picocolors, yargs removed — CLI is being removed
+    // "chalk": "^5.3.0",
+    // "cli-progress": "^3.12.0",
+    // "clui": "^0.3.6",
     "cors": "^2.8.5",
     "express": "4.21.0",
     "msw": "^2.3.0",
-    "ora": "^6.3.1",
-    "picocolors": "^1.1.1",
-    "ws": "^8.18.0",
-    "yargs": "^17.7.2"
+    // "ora": "^6.3.1",
+    // "picocolors": "^1.1.1",
+    "ws": "^8.18.0"
+    // TODO: yargs removed — CLI is being removed
+    // "yargs": "^17.7.2"
   },
   "devDependencies": {
     "@babel/types": "^7.26.3",
-    "@inquirer/prompts": "^8.3.0",
+    // TODO: @inquirer/prompts, @types/yargs removed — CLI is being removed
+    // "@inquirer/prompts": "^8.3.0",
     "@types/babel__traverse": "^7.20.6",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.5",
     "@types/node": "~20.19.25",
     "@types/ws": "^8.18.0",
-    "@types/yargs": "^17.0.33",
+    // TODO: @types/yargs removed — CLI is being removed
+    // "@types/yargs": "^17.0.33",
     "babel-minify": "^0.5.2",
     "concurrently": "^9.0.0",
     "esbuild": "^0.27.0",
